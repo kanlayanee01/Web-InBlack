@@ -6,7 +6,14 @@ import pytest
 
 from app.domain.order_number import is_valid_order_number
 from app.services import orders as order_service
-from tests.api.conftest import order_body, post_order, signed, webhook_bytes
+from tests.api.conftest import (
+    PAID_FLOW,
+    order_body,
+    post_order,
+    signed,
+    wait_for_status,
+    webhook_bytes,
+)
 
 FLASH = "FLASH-SKIN-01"
 HOOK = "/api/v1/webhooks/payment"
@@ -14,8 +21,8 @@ HOOK = "/api/v1/webhooks/payment"
 
 async def _expire(db, order_id: str) -> None:
     await db.execute("UPDATE orders SET expires_at = now() - interval '1 second'")
-    assert await order_service.expire_due_orders(db) >= 1
-    assert await db.fetchval("SELECT status FROM orders WHERE id = $1", order_id) == "EXPIRED"
+    await order_service.expire_due_orders(db)  # the worker may also get there first
+    await wait_for_status(db, order_id, "EXPIRED")
 
 
 @pytest.mark.parametrize(
@@ -177,9 +184,7 @@ async def test_failed_after_succeeded_does_not_move_the_order_back(client, db, s
     await send_webhook(created["id"], created["total_satang"])
     hook = await send_webhook(created["id"], created["total_satang"], kind="payment.failed")
     assert hook.json()["outcome"] == "ignored_out_of_order"
-    assert await db.fetchval(
-        "SELECT status FROM orders WHERE id = $1", created["id"]
-    ) == "IN_QUEUE"
+    assert await db.fetchval("SELECT status FROM orders WHERE id = $1", created["id"]) in PAID_FLOW
 
 
 async def test_payment_failed_returns_stock_and_voucher(client, db, send_webhook):
@@ -247,7 +252,8 @@ async def test_late_payment_with_stock_available_is_fulfilled(client, db, send_w
         created["id"],
         FLASH,
     )
-    assert tuple(row) == ("IN_QUEUE", 98, 1)
+    assert row["status"] in PAID_FLOW
+    assert (row["stock_remaining"], row["used_count"]) == (98, 1)
 
 
 async def test_late_payment_without_stock_is_refunded_automatically(client, db, send_webhook):
@@ -293,22 +299,20 @@ async def test_late_payment_with_wrong_amount_goes_to_review(client, db, send_we
 # ---- provider refund events
 
 
-async def test_refund_webhook_confirms_our_pending_refund(client, db, send_webhook):
-    from app.services import refunds
-
+async def test_external_refund_from_the_provider_is_recorded(client, db, send_webhook):
     created = (await post_order(client, order_body())).json()
     await send_webhook(created["id"], created["total_satang"])
-    await db.execute("UPDATE orders SET status = 'IN_PROGRESS' WHERE id = $1", created["id"])
-    await db.execute("UPDATE orders SET status = 'COMPLETED' WHERE id = $1", created["id"])
-    async with db.acquire() as conn, conn.transaction():
-        await refunds.request_refund(conn, created["id"], 1000, "partial", "finance@test")
+    await wait_for_status(db, created["id"], "COMPLETED")
 
     hook = await send_webhook(created["id"], 1000, kind="payment.refunded")
 
-    assert hook.json()["outcome"] == "refund_confirmed"
-    assert await db.fetchval("SELECT status FROM refunds") == "SUCCEEDED"
-    row = await db.fetchrow("SELECT refunded_satang FROM orders WHERE id = $1", created["id"])
-    assert row["refunded_satang"] == 1000
+    assert hook.json()["outcome"] == "refund_external"
+    row = await db.fetchrow("SELECT * FROM orders WHERE id = $1", created["id"])
+    assert (row["status"], row["refunded_satang"]) == ("COMPLETED", 1000)
+    assert await db.fetchval(
+        "SELECT count(*) FROM ledger_entries WHERE kind = 'refund' AND order_id = $1",
+        created["id"],
+    ) == 1
 
 
 async def test_refund_webhook_above_the_balance_goes_to_review(client, db, send_webhook):

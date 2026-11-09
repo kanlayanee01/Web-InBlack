@@ -5,7 +5,14 @@ import uuid
 from collections import Counter
 
 from app.services import refunds
-from tests.api.conftest import order_body, post_order, signed, webhook_bytes
+from tests.api.conftest import (
+    PAID_FLOW,
+    order_body,
+    post_order,
+    signed,
+    wait_for_status,
+    webhook_bytes,
+)
 
 FLASH = "FLASH-SKIN-01"
 
@@ -112,11 +119,12 @@ async def test_same_webhook_20_times_simultaneously_applies_once(client, db):
     assert await db.fetchval("SELECT count(*) FROM ledger_entries") == 1
     assert await db.fetchval("SELECT count(*) FROM jobs WHERE kind = 'fulfill_order'") == 1
     order = await db.fetchrow("SELECT * FROM orders WHERE id = $1", created["id"])
-    assert (order["status"], order["paid_satang"]) == ("IN_QUEUE", created["total_satang"])
+    assert order["status"] in PAID_FLOW
+    assert order["paid_satang"] == created["total_satang"]
     seqs = await db.fetch(
         "SELECT seq, to_status FROM order_events WHERE order_id = $1 ORDER BY seq", created["id"]
     )
-    assert [(r["seq"], r["to_status"]) for r in seqs] == [
+    assert [(r["seq"], r["to_status"]) for r in seqs][:3] == [
         (1, "PENDING_PAYMENT"),
         (2, "PAID"),
         (3, "IN_QUEUE"),
@@ -126,8 +134,7 @@ async def test_same_webhook_20_times_simultaneously_applies_once(client, db):
 async def _completed_order(client, db, send_webhook, sku: str = "DIAMOND-1000") -> dict:
     created = (await post_order(client, order_body([(sku, 1)]))).json()
     await send_webhook(created["id"], created["total_satang"])
-    await db.execute("UPDATE orders SET status = 'IN_PROGRESS' WHERE id = $1", created["id"])
-    await db.execute("UPDATE orders SET status = 'COMPLETED' WHERE id = $1", created["id"])
+    await wait_for_status(db, created["id"], "COMPLETED")
     return created
 
 

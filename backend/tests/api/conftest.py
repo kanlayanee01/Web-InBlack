@@ -3,6 +3,7 @@
 These reset the database, so they only run against a stack started with APP_ENV=test.
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -83,6 +84,21 @@ def webhook_bytes(
 
 
 Send = Callable[..., Awaitable[httpx.Response]]
+
+PAID_FLOW = {"IN_QUEUE", "IN_PROGRESS", "COMPLETED"}
+
+
+async def wait_for_status(
+    db: asyncpg.Pool, order_id: str, status: str, within_seconds: int = 150
+) -> None:
+    deadline = time.monotonic() + within_seconds
+    current = None
+    while time.monotonic() < deadline:
+        current = await db.fetchval("SELECT status FROM orders WHERE id = $1", order_id)
+        if current == status:
+            return
+        await asyncio.sleep(0.1)
+    raise AssertionError(f"{order_id} stayed {current}, expected {status}")
 
 
 @pytest.fixture

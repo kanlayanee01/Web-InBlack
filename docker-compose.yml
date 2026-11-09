@@ -83,6 +83,49 @@ services:
       <<: *backend-env
       INSTANCE_ID: api-2
 
+  worker:
+    build:
+      context: ./backend
+      target: runtime
+    image: inblack-backend
+    restart: always
+    environment: *backend-env
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  mock-game:
+    build: ./mock-game
+    restart: always
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      FAIL_RATE: ${FAIL_RATE:-0}
+      TIMEOUT_RATE: ${TIMEOUT_RATE:-0}
+      SUCCESS_BUT_TIMEOUT_RATE: ${SUCCESS_BUT_TIMEOUT_RATE:-0}
+      LATENCY_MS: ${LATENCY_MS:-0}
+    volumes:
+      - mock-game-data:/data
+    ports:
+      - "${MOCK_GAME_PORT:-8091}:8000"
+    healthcheck: &python-health
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  mock-pay:
+    build: ./mock-pay
+    restart: always
+    environment:
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-whsec_test_inblackm_2026}
+      WEBHOOK_URL: http://proxy/api/v1/webhooks/payment
+    volumes:
+      - mock-pay-data:/data
+    ports:
+      - "${MOCK_PAY_PORT:-8090}:8000"
+    healthcheck: *python-health
+
   proxy:
     image: nginx:1.27-alpine
     restart: always
@@ -105,6 +148,8 @@ services:
     environment:
       <<: *backend-env
       API_BASE_URL: http://proxy
+      MOCK_GAME_TEST_URL: http://mock-game:8000
+      MOCK_PAY_TEST_URL: http://mock-pay:8000
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -112,3 +157,5 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  mock-game-data:
+  mock-pay-data:

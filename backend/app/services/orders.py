@@ -205,7 +205,9 @@ async def fetch_order_json(
         "currency": "THB",
         "expires_at": order["expires_at"].isoformat(),
         "created_at": order["created_at"].isoformat(),
-        "checkout_url": f"{checkout_base_url}/checkout/{order['id']}",
+        "checkout_url": (
+            f"{checkout_base_url}/checkout/{order['id']}?amount={order['total_satang']}"
+        ),
     }
 
 
