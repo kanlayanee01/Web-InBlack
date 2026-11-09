@@ -40,6 +40,40 @@ ACTIONS = {
     "wrong_amount": "จ่ายยอดไม่ตรง",
 }
 
+# The first form is the normal payment, so it gets the primary button style.
+PAGE_STYLE = """
+:root{color-scheme:light dark;--bg:#F8F2D8;--surface:rgba(255,255,255,.74);--line:rgba(255,255,255,.85);
+--line-2:rgba(20,0,195,.16);--text:#15104F;--muted:#4A4672;--primary:#1400C3;--on-primary:#F8F2D8;
+--sphere:#1400C3;--accent:#FF4E02;--shadow:0 12px 32px rgba(20,0,195,.1)}
+@media (prefers-color-scheme:dark){:root{--bg:#0A0738;--surface:rgba(255,255,255,.1);
+--line:rgba(255,255,255,.22);--line-2:rgba(255,255,255,.18);--text:#F8F2D8;--muted:#CBC6E3;
+--primary:#F8F2D8;--on-primary:#15104F;--shadow:0 12px 32px rgba(0,0,0,.35)}}
+*{box-sizing:border-box}
+html{background:var(--bg);overflow-x:hidden}
+body{margin:0;min-height:100vh;position:relative;overflow-x:clip;display:flex;align-items:center;
+justify-content:center;padding:16px;color:var(--text);line-height:1.7;
+font-family:"IBM Plex Sans Thai",system-ui,sans-serif}
+body::before,body::after{content:"";position:absolute;z-index:-1;border-radius:50%}
+body::before{width:420px;height:420px;right:-120px;top:-120px;background:var(--sphere)}
+body::after{width:300px;height:300px;left:-100px;bottom:-80px;background:var(--accent)}
+.glass{width:100%;min-width:0;max-width:440px;padding:24px;border-radius:20px;background:var(--surface);
+border:1px solid var(--line);box-shadow:var(--shadow);
+-webkit-backdrop-filter:blur(22px) saturate(150%);backdrop-filter:blur(22px) saturate(150%)}
+h1{margin:0;font-size:1.5rem;line-height:1.35}
+p{margin:0 0 12px}
+.muted{color:var(--muted)}.small{font-size:.875rem;margin:16px 0 0}.id{overflow-wrap:anywhere}
+.amount{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:12px 0;
+margin-bottom:12px;border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2)}
+.amount strong{font-size:1.5rem}
+.actions{display:flex;flex-direction:column;gap:8px}
+form{margin:0}
+button{width:100%;min-height:48px;padding:8px 16px;border-radius:14px;font:inherit;font-weight:600;
+cursor:pointer;background:var(--surface);color:var(--text);border:1px solid var(--line-2)}
+form:first-child button{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
+button:hover{filter:brightness(.95)}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+"""
+
 db = sqlite3.connect(DB_PATH, isolation_level=None, check_same_thread=False)
 db.execute("PRAGMA journal_mode=WAL")
 db.execute("PRAGMA synchronous=FULL")
@@ -186,6 +220,19 @@ def _valid_order(order_id: str) -> str:
     return order_id
 
 
+def _page(body: str) -> str:
+    """Wraps content in the same look as the shop: warm white, blue, orange and frosted glass."""
+    return (
+        '<!doctype html><html lang="th"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        "<title>InBlack Pay</title>"
+        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+        'family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap">'
+        f"<style>{PAGE_STYLE}</style></head>"
+        f'<body><main class="glass">{body}</main></body></html>'
+    )
+
+
 @app.get("/checkout/{order_id}", response_class=HTMLResponse)
 async def checkout_page(order_id: str, amount: int = Query(gt=0)) -> str:
     safe_id = html.escape(_valid_order(order_id))
@@ -195,13 +242,12 @@ async def checkout_page(order_id: str, amount: int = Query(gt=0)) -> str:
         f"<button>{label}</button></form>"
         for action, label in ACTIONS.items()
     )
-    return (
-        '<!doctype html><html lang="th"><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        "<title>Mock Payment</title>"
-        "<style>body{font-family:sans-serif;max-width:420px;margin:2rem auto;padding:0 1rem}"
-        "button{width:100%;padding:.75rem;margin:.25rem 0;font-size:1rem;cursor:pointer}</style>"
-        f"<h1>ชำระเงินจำลอง</h1><p>ออเดอร์ {safe_id}</p><p>ยอด ฿{baht}</p>{buttons}</html>"
+    return _page(
+        "<h1>ชำระเงินจำลอง</h1>"
+        f'<p class="muted id">{safe_id}</p>'
+        f'<div class="amount"><span class="muted">ยอดชำระ</span><strong>฿{baht}</strong></div>'
+        f'<div class="actions">{buttons}</div>'
+        '<p class="muted small">หน้านี้จำลองผู้ให้บริการรับชำระเงิน ไม่มีการตัดเงินจริง</p>'
     )
 
 
@@ -222,8 +268,12 @@ async def pay(order_id: str, action: str, amount: int = Query(gt=0)) -> str:
         accepted = _enqueue(order_id, "payment.succeeded", max(amount - 100, 1))
     else:
         raise HTTPException(status_code=404)
-    message = "รับรายการแล้ว" if accepted else "ออเดอร์นี้ชำระเงินไปแล้ว"
-    return f'<!doctype html><html lang="th"><meta charset="utf-8"><p>{message}</p></html>'
+    title = "รับรายการแล้ว" if accepted else "ออเดอร์นี้ชำระเงินไปแล้ว"
+    return _page(
+        f"<h1>{title}</h1>"
+        f'<p class="muted id">{html.escape(order_id)}</p>'
+        "<p>กลับไปที่แท็บเดิมได้เลย สถานะออเดอร์จะอัปเดตให้เอง</p>"
+    )
 
 
 class RefundRequest(BaseModel):

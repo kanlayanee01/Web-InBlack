@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 import { useAdmin } from "../../admin-shell";
+import { Toast } from "@/components/toast";
 import { Field, Spinner } from "@/components/ui";
 import { api, ApiError, randomKey } from "@/lib/api";
 import { formatBaht, parseBaht } from "@/lib/money";
@@ -75,6 +76,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const closeToast = useCallback(() => setMessage(null), []);
+
   const load = useCallback(async () => {
     try {
       setOrder(await api<Detail>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}`));
@@ -131,14 +134,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {item.name} x{item.qty} (฿{formatBaht(item.unit_price_satang)})
           </p>
         ))}
-        <div aria-live="polite">
-          {message ? <p className="notice">{message}</p> : null}
-          {error ? (
-            <p className="alert" role="alert">
-              {error}
-            </p>
-          ) : null}
-        </div>
+        {error ? (
+          <p className="alert" role="alert">
+            {error}
+          </p>
+        ) : null}
         <div className="row">
           {admin.can("support") && RETRYABLE.includes(order.status) ? (
             <button className="btn btn-secondary" type="button" onClick={() => void retry()}>
@@ -178,6 +178,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         rows={order.refunds}
         columns={["amount_satang", "status", "reason", "actor", "created_at"]}
       />
+      <Toast message={message} onClose={closeToast} />
     </div>
   );
 }

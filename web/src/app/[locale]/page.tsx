@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ProductIcon } from "@/components/icons";
 import { getProducts } from "@/lib/catalog";
 import { dict, isLocale } from "@/lib/i18n";
 import { formatBaht } from "@/lib/money";
@@ -35,12 +36,18 @@ export default async function HomePage({ params }: Props) {
   const products = await getProducts();
   return (
     <>
-      <h1>{t.home.title}</h1>
-      <p className="muted">{t.home.lead}</p>
+      <section className="glass hero">
+        <h1>{t.home.title}</h1>
+        <p className="muted" style={{ marginBottom: 0 }}>
+          {t.home.lead}
+        </p>
+      </section>
       <div className="grid">
         {products.map((product) => (
-          <article key={product.sku} className="card">
-            <div className="product-art" aria-hidden="true" />
+          <article key={product.sku} className="card product-card">
+            <div className="product-art">
+              <ProductIcon sku={product.sku} />
+            </div>
             <h2>
               <Link href={`/${locale}/products/${product.slug}`}>{product.name}</Link>
             </h2>

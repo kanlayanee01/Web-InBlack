@@ -1,6 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
+import "@fontsource/ibm-plex-sans-thai/thai-400.css";
+import "@fontsource/ibm-plex-sans-thai/thai-600.css";
+import "@fontsource/ibm-plex-sans-thai/thai-700.css";
+import "@fontsource/ibm-plex-sans-thai/latin-400.css";
+import "@fontsource/ibm-plex-sans-thai/latin-600.css";
+import "@fontsource/ibm-plex-sans-thai/latin-700.css";
 import "../globals.css";
 import { AdminShell } from "./admin-shell";
 

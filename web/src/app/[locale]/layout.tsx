@@ -3,7 +3,14 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import "@fontsource/ibm-plex-sans-thai/thai-400.css";
+import "@fontsource/ibm-plex-sans-thai/thai-600.css";
+import "@fontsource/ibm-plex-sans-thai/thai-700.css";
+import "@fontsource/ibm-plex-sans-thai/latin-400.css";
+import "@fontsource/ibm-plex-sans-thai/latin-600.css";
+import "@fontsource/ibm-plex-sans-thai/latin-700.css";
 import "../globals.css";
+import { GemIcon, SearchIcon, UserIcon } from "@/components/icons";
 import { siteUrl } from "@/lib/catalog";
 import { dict, isLocale, LOCALES, type Locale } from "@/lib/i18n";
 
@@ -49,12 +56,21 @@ export default async function LocaleLayout({
         <header className="header">
           <div className="header-inner">
             <Link className="brand" href={`/${locale}`}>
+              <GemIcon size={26} />
               {t.brand}
             </Link>
             <nav className="nav" aria-label={locale === "th" ? "เมนูหลัก" : "Main"}>
-              <Link href={`/${locale}`}>{t.nav.catalog}</Link>
-              <Link href={`/${locale}/track`}>{t.nav.track}</Link>
-              <Link href={`/${locale}/my-orders`}>{t.nav.myOrders}</Link>
+              <Link href={`/${locale}`} className="nav-text">
+                {t.nav.catalog}
+              </Link>
+              <Link href={`/${locale}/track`} aria-label={t.nav.track}>
+                <SearchIcon />
+                <span className="nav-text">{t.nav.track}</span>
+              </Link>
+              <Link href={`/${locale}/my-orders`} aria-label={t.nav.myOrders}>
+                <UserIcon />
+                <span className="nav-text">{t.nav.myOrders}</span>
+              </Link>
               <Link href={`/${other}`} lang={other} hrefLang={other}>
                 {t.otherLocale}
               </Link>

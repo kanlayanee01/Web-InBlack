@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { LiveStock } from "./live-stock";
+import { ProductIcon } from "@/components/icons";
 import { buildSlugs, getProduct, siteUrl } from "@/lib/catalog";
 import { dict, isLocale, LOCALES } from "@/lib/i18n";
 import { decimalPrice, formatBaht } from "@/lib/money";
@@ -75,7 +76,9 @@ export default async function ProductPage({ params }: Props) {
           __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
         }}
       />
-      <div className="product-art" aria-hidden="true" />
+      <div className="product-art" style={{ height: 200 }}>
+        <ProductIcon sku={product.sku} size={88} />
+      </div>
       <h1>{product.name}</h1>
       <p>{description}</p>
       <p>

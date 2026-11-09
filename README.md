@@ -69,7 +69,7 @@ make test
 |---|---|---|
 | ซื้อ Flash Sale พร้อมกัน 1,500 คน | ขายได้ 100 ชิ้นพอดี | ไม่เกิน 100 |
 | p95 ของ `GET /admin/orders` ที่ 100,000 รายการ | ประมาณ 10 ms | < 200 ms |
-| Lighthouse Mobile หน้าสินค้า (Performance / A11y / Best Practices / SEO) | 100 / 100 / 100 / 100 ทั้ง 3 รอบล่าสุด | ≥ 90 / ≥ 95 / ≥ 95 / 100 |
+| Lighthouse Mobile หน้าสินค้า (Performance / A11y / Best Practices / SEO) | Performance 97–100 และที่เหลือ 100 ทั้ง 3 รอบล่าสุด | ≥ 90 / ≥ 95 / ≥ 95 / 100 |
 | ฟื้นตัวหลัง `docker kill` | ไม่เกิน 15 วินาที | ไม่ค้างเกิน 2 นาที |
 
 คะแนน Performance ของ Lighthouse แกว่งตามภาระเครื่อง ระหว่างพัฒนาเคยมีรอบหนึ่งได้ 82 ตอนเครื่องเพิ่ง build เสร็จ
@@ -86,7 +86,7 @@ make test
 
 **ยังไม่ได้ทำหรือทำไม่ครบ**
 
-- ไฟล์ออกแบบจาก Claude Design ในโฟลเดอร์ `design/` (ดู [design/README.md](design/README.md))
+- ไฟล์ export ของแบบจาก Claude Design ในโฟลเดอร์ `design/` (ดูสถานะล่าสุดที่ [design/README.md](design/README.md))
 - โบนัส: แอป Mobile, OpenTelemetry/Jaeger และ deploy จริง
 - GitHub Actions เขียนแล้ว แต่ต้อง push ขึ้น GitHub ก่อนจึงจะรันจริง
 - หน้าจอ superadmin แก้ได้เฉพาะชื่อและราคาสินค้า ส่วนโค้ดส่วนลดมีแค่ API เปิดปิด และยังไม่มี API สร้างโค้ดใหม่

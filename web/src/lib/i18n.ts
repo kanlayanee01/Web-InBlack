@@ -13,8 +13,8 @@ const th = {
   otherLocale: "English",
   footer: "ระบบสาธิตเพื่อการทดสอบ ไม่มีการเรียกเก็บเงินจริง",
   home: {
-    title: "เติมเกมและซื้อแพ็กเกจ",
-    lead: "เลือกสินค้า ชำระเงิน แล้วติดตามสถานะได้ทันทีจนเติมเข้าเกม",
+    title: "เติมเกมง่าย ใน 3 ขั้นตอน",
+    lead: "เลือกสินค้า ชำระเงิน แล้วดูสถานะได้ทันทีจนเติมเข้าเกม",
     buy: "ซื้อ",
   },
   product: {
@@ -120,7 +120,7 @@ const en: Dictionary = {
   otherLocale: "ไทย",
   footer: "Demo system for testing. No real money is charged.",
   home: {
-    title: "Game top-ups and packages",
+    title: "Top up in 3 easy steps",
     lead: "Pick a product, pay, and follow your order live until it reaches your game.",
     buy: "Buy",
   },

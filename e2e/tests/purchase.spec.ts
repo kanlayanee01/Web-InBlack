@@ -28,7 +28,8 @@ test("buy, pay, see the status change live, then refund in admin", async ({ page
   const email = `e2e-${Date.now()}@example.com`;
 
   await page.goto("/th/checkout?sku=DIAMOND-1000");
-  await page.getByRole("textbox", { name: "จำนวน 1,000 Diamonds" }).fill("2");
+  // By id, not name: another test renames this product and ISR can briefly serve that name.
+  await page.locator("#qty-DIAMOND-1000").fill("2");
   await fillCheckout(page, email);
   await page.getByLabel("โค้ดส่วนลด").fill("SAVE10");
   await page.getByRole("radio", { name: /บัตรเครดิต/ }).check();
@@ -152,6 +153,15 @@ for (const path of ["/th", "/en", "/th/products/flash-skin-01", "/th/checkout?sk
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBe(0);
+    // The page clips its decorative spheres, so clipped content would not show up as overflow.
+    // Wide admin tables are allowed: they scroll inside their own box.
+    const clipped = await page.evaluate(() =>
+      [...document.querySelectorAll("header *, main *")]
+        .filter((element) => !element.closest(".table-wrap"))
+        .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 1)
+        .map((element) => element.tagName),
+    );
+    expect(clipped).toEqual([]);
   });
 }
 

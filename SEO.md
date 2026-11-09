@@ -10,9 +10,9 @@
 | Structured data | หน้าสินค้ามี JSON-LD `Product` + `Offer` ราคาเป็นทศนิยมจากจำนวนเต็มสตางค์ |
 | Open Graph | ภาพ OG สร้างแบบ dynamic ต่อสินค้า |
 | Sitemap | `/sitemap.xml` สร้างจากสินค้าจริงทั้งสองภาษา |
-| ประสิทธิภาพ | ไม่โหลดฟอนต์ภายนอก ใช้ฟอนต์ในระบบที่รองรับภาษาไทย |
+| ประสิทธิภาพ | ฟอนต์ IBM Plex Sans Thai โฮสต์เองกับเว็บ ไม่เรียก Google Fonts ตอนใช้งาน |
 
-ผล Lighthouse Mobile หน้าสินค้า 3 รอบล่าสุด: Performance 100, Accessibility 100, Best Practices 100, SEO 100 คะแนน Performance แกว่งตามภาระเครื่อง และเคยมีรอบหนึ่งได้ 82 ตอนเครื่องเพิ่ง build เสร็จ
+ผล Lighthouse Mobile หน้าสินค้า 3 รอบล่าสุด: Performance 97–100, Accessibility 100, Best Practices 100, SEO 100 คะแนน Performance แกว่งตามภาระเครื่อง และเคยมีรอบหนึ่งได้ 82 ตอนเครื่องเพิ่ง build เสร็จ
 
 ## ทำไมหน้า tracking, admin, my-orders ไม่ควร index
 
