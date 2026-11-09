@@ -5,11 +5,12 @@ in SQLite on a volume, so /stats still tells the truth after this container is k
 """
 
 import asyncio
+import json
 import os
 import random
 import sqlite3
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 DB_PATH = os.environ.get("DB_PATH", "/data/mock-game.db")
@@ -65,7 +66,18 @@ async def _hang() -> None:
 
 
 @app.post("/topups")
-async def create_topup(body: TopupRequest) -> dict[str, object]:
+async def create_topup(body: TopupRequest, request: Request) -> dict[str, object]:
+    print(
+        json.dumps(
+            {
+                "service": "mock-game",
+                "message": "topup received",
+                "request_id": request.headers.get("x-request-id", "-"),
+                "reference": body.reference,
+            }
+        ),
+        flush=True,
+    )
     # Recorded on arrival, so a GET during a slow POST answers PROCESSING instead of "not found".
     db.execute(
         """

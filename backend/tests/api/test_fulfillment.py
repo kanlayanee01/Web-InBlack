@@ -163,6 +163,16 @@ async def test_pay_button_duplicate_webhooks_apply_once(client, db, game, pay):
     assert await _success_counts(game, order["id"]) == {f"{order['id']}-1": 1}
 
 
+async def test_pay_button_slow_webhook_arrives_a_minute_later(client, db, game, pay):
+    order = (await post_order(client, order_body())).json()
+    await _click(pay, order, "slow")
+    await asyncio.sleep(5)
+    assert await db.fetchval(
+        "SELECT status FROM orders WHERE id = $1", order["id"]
+    ) == "PENDING_PAYMENT"
+    await wait_for_status(db, order["id"], "COMPLETED", within_seconds=75)
+
+
 async def test_pay_button_wrong_amount(client, db, game, pay):
     order = (await post_order(client, order_body())).json()
     await _click(pay, order, "wrong_amount")

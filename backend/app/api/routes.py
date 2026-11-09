@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import time
 
 import asyncpg
@@ -15,6 +16,7 @@ from app.services import auth, idempotency, orders, payments
 from app.settings import get_settings
 
 router = APIRouter(prefix="/api/v1")
+log = logging.getLogger("webhooks")
 
 JSON = "application/json"
 ORDER_SCOPE = "orders:create"
@@ -150,6 +152,12 @@ async def payment_webhook(
         occurred_at=body.occurred_at,
     )
     outcome = await payments.handle_event(request.app.state.db, event, raw_body.decode())
+    log.info(
+        "webhook processed",
+        extra={
+            "fields": {"event_id": event.event_id, "order_id": event.order_id, "outcome": outcome}
+        },
+    )
     return Response(dumps({"received": True, "outcome": outcome}), media_type=JSON)
 
 

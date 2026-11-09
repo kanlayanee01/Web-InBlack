@@ -1,0 +1,680 @@
+openapi: 3.1.0
+info:
+  title: InBlack Top-Up API
+  version: 1.0.0
+  description: >
+    Every amount is an integer number of satang. Errors use RFC 9457 Problem Details with a
+    machine-readable `code`. Requests that change state on a signed-in session need the
+    X-CSRF-Token header.
+servers:
+  - url: http://localhost:8088
+tags:
+  - name: catalog
+  - name: orders
+  - name: auth
+  - name: webhooks
+  - name: admin
+  - name: operations
+components:
+  securitySchemes:
+    customerSession: { type: apiKey, in: cookie, name: ib_session }
+    adminSession: { type: apiKey, in: cookie, name: ib_admin }
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, maxLength: 255 }
+    OrderId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^ORD-[0-9]{13}-[0-9]{3}$' }
+  responses:
+    Problem:
+      description: Error
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code, detail]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        code: { type: string, examples: [OUT_OF_STOCK, VOUCHER_EXHAUSTED, PER_CUSTOMER_LIMIT, IDEMPOTENCY_KEY_REUSED, INVALID_TRANSITION] }
+        detail: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string }
+              message: { type: string }
+    Satang: { type: integer, minimum: 0 }
+    Status:
+      type: string
+      enum: [PENDING_PAYMENT, PAID, IN_QUEUE, IN_PROGRESS, COMPLETED, EXPIRED, PAYMENT_FAILED, FAILED, REFUNDED, NEEDS_REVIEW]
+    Badge:
+      type: string
+      enum: [awaiting_payment, in_queue, processing, completed, expired, payment_failed, refunded, action_needed]
+    Product:
+      type: object
+      required: [sku, slug, name, description_th, description_en, price_satang, stock_remaining, max_qty_per_order, max_qty_per_email]
+      properties:
+        sku: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        description_th: { type: string }
+        description_en: { type: string }
+        price_satang: { $ref: '#/components/schemas/Satang' }
+        stock_remaining: { type: [integer, 'null'] }
+        max_qty_per_order: { type: [integer, 'null'] }
+        max_qty_per_email: { type: [integer, 'null'] }
+    ProductList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+    Item:
+      type: object
+      required: [sku, qty]
+      properties:
+        sku: { type: string }
+        qty: { type: integer, minimum: 1, maximum: 99 }
+    QuoteRequest:
+      type: object
+      required: [items, payment_method]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/Item' }
+        payment_method: { type: string, enum: [promptpay, truemoney, card] }
+        voucher_code: { type: [string, 'null'] }
+    CreateOrderRequest:
+      allOf:
+        - $ref: '#/components/schemas/QuoteRequest'
+        - type: object
+          required: [email, game_uid]
+          properties:
+            email: { type: string, format: email }
+            game_uid: { type: string, pattern: '^[A-Za-z0-9_-]{4,32}$' }
+    Quote:
+      type: object
+      required: [subtotal_satang, discount_satang, net_satang, fee_satang, total_satang, vat_satang]
+      properties:
+        subtotal_satang: { $ref: '#/components/schemas/Satang' }
+        discount_satang: { $ref: '#/components/schemas/Satang' }
+        net_satang: { $ref: '#/components/schemas/Satang' }
+        fee_satang: { $ref: '#/components/schemas/Satang' }
+        total_satang: { $ref: '#/components/schemas/Satang' }
+        vat_satang: { $ref: '#/components/schemas/Satang' }
+    TimelineEvent:
+      type: object
+      required: [seq, status, badge, created_at]
+      properties:
+        seq: { type: integer, minimum: 1 }
+        status: { $ref: '#/components/schemas/Status' }
+        badge: { $ref: '#/components/schemas/Badge' }
+        created_at: { type: string }
+    Order:
+      allOf:
+        - $ref: '#/components/schemas/Quote'
+        - type: object
+          required: [id, status, badge, email, game_uid, payment_method, items, currency, expires_at, created_at, checkout_url, tracking_token]
+          properties:
+            id: { type: string, pattern: '^ORD-[0-9]{13}-[0-9]{3}$' }
+            status: { $ref: '#/components/schemas/Status' }
+            badge: { $ref: '#/components/schemas/Badge' }
+            email: { type: string }
+            game_uid: { type: string }
+            payment_method: { type: string }
+            voucher_code: { type: [string, 'null'] }
+            items:
+              type: array
+              items:
+                type: object
+                required: [sku, name, unit_price_satang, qty]
+                properties:
+                  sku: { type: string }
+                  name: { type: string }
+                  unit_price_satang: { $ref: '#/components/schemas/Satang' }
+                  qty: { type: integer }
+            currency: { const: THB }
+            expires_at: { type: string }
+            created_at: { type: string }
+            checkout_url: { type: string }
+            tracking_token: { type: string }
+            timeline:
+              type: array
+              items: { $ref: '#/components/schemas/TimelineEvent' }
+    OrderSummaryList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, status, badge, total_satang, created_at]
+            properties:
+              id: { type: string }
+              status: { $ref: '#/components/schemas/Status' }
+              badge: { $ref: '#/components/schemas/Badge' }
+              total_satang: { $ref: '#/components/schemas/Satang' }
+              created_at: { type: string }
+    CustomerSession:
+      type: object
+      required: [email, csrf_token]
+      properties:
+        email: { type: string }
+        csrf_token: { type: string }
+    AdminSession:
+      type: object
+      required: [email, role, csrf_token]
+      properties:
+        email: { type: string }
+        role: { type: string, enum: [viewer, support, finance, superadmin] }
+        csrf_token: { type: string }
+    AdminOrderRow:
+      type: object
+      required: [id, status, email, game_uid, payment_method, total_satang, created_at]
+      properties:
+        id: { type: string }
+        status: { $ref: '#/components/schemas/Status' }
+        email: { type: string }
+        game_uid: { type: string }
+        payment_method: { type: string }
+        total_satang: { $ref: '#/components/schemas/Satang' }
+        created_at: { type: string }
+    AdminOrderPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminOrderRow' }
+        next_cursor: { type: [string, 'null'] }
+    AdminOrderDetail:
+      type: object
+      required: [id, status, email, game_uid, total_satang, paid_satang, refunded_satang, items, timeline, webhooks, fulfillment_attempts, refunds]
+      properties:
+        id: { type: string }
+        status: { $ref: '#/components/schemas/Status' }
+        email: { type: string }
+        game_uid: { type: string }
+        total_satang: { $ref: '#/components/schemas/Satang' }
+        paid_satang: { $ref: '#/components/schemas/Satang' }
+        refunded_satang: { $ref: '#/components/schemas/Satang' }
+        items: { type: array }
+        timeline: { type: array }
+        webhooks: { type: array }
+        fulfillment_attempts: { type: array }
+        refunds: { type: array }
+    RefundRequest:
+      type: object
+      required: [amount_satang, reason]
+      properties:
+        amount_satang: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 1 }
+    RefundResult:
+      type: object
+      required: [refund_id, order_id, amount_satang, order_status]
+      properties:
+        refund_id: { type: string }
+        order_id: { type: string }
+        amount_satang: { $ref: '#/components/schemas/Satang' }
+        order_status: { $ref: '#/components/schemas/Status' }
+    AuditLogPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, actor, action, target, detail, created_at]
+            properties:
+              id: { type: integer }
+              actor: { type: string }
+              action: { type: string }
+              target: { type: [string, 'null'] }
+              detail: { type: object }
+              created_at: { type: string }
+        next_cursor: { type: [string, 'null'] }
+    ReconciliationResult:
+      type: object
+      required: [id, file_name, row_count, mismatch_count, summary, items]
+      properties:
+        id: { type: string }
+        file_name: { type: string }
+        row_count: { type: integer }
+        mismatch_count: { type: integer }
+        summary:
+          type: object
+          additionalProperties: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            required: [category, detail]
+            properties:
+              category: { type: string, enum: [missing_in_system, missing_at_provider, amount_mismatch, status_mismatch] }
+              event_id: { type: [string, 'null'] }
+              order_id: { type: [string, 'null'] }
+              system_satang: { type: [integer, 'null'] }
+              provider_satang: { type: [integer, 'null'] }
+              detail: { type: string }
+    Dashboard:
+      type: object
+      required: [orders_last_minute, sales_today_satang, queue_depth, dead_letter]
+      properties:
+        orders_last_minute: { type: integer }
+        sales_today_satang: { type: integer }
+        queue_depth: { type: integer }
+        dead_letter: { type: integer }
+    WebhookEvent:
+      type: object
+      required: [event_id, type, order_id, amount_satang, currency, occurred_at]
+      properties:
+        event_id: { type: string }
+        type: { type: string, enum: [payment.succeeded, payment.failed, payment.refunded] }
+        order_id: { type: string }
+        amount_satang: { type: integer, minimum: 1 }
+        currency: { type: string }
+        occurred_at: { type: string, format: date-time }
+    WebhookAck:
+      type: object
+      required: [received, outcome]
+      properties:
+        received: { const: true }
+        outcome: { type: string }
+paths:
+  /api/v1/products:
+    get:
+      tags: [catalog]
+      summary: List products
+      responses:
+        '200':
+          description: Products
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductList' }
+  /api/v1/products/{slug}:
+    get:
+      tags: [catalog]
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Product
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/v1/orders/quote:
+    post:
+      tags: [orders]
+      summary: Price a cart without creating anything
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuoteRequest' }
+      responses:
+        '200':
+          description: Price breakdown
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quote' }
+        '422': { $ref: '#/components/responses/Problem' }
+  /api/v1/orders:
+    post:
+      tags: [orders]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrderRequest' }
+      responses:
+        '201':
+          description: Order created. A repeated key and body returns identical bytes.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+  /api/v1/orders/track:
+    post:
+      tags: [orders]
+      summary: Guest order lookup, rate limited to 10/min/IP and 5/min/order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_id, email]
+              properties:
+                order_id: { type: string }
+                email: { type: string }
+      responses:
+        '200':
+          description: Order, with Game UID masked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+  /api/v1/orders/{id}:
+    get:
+      tags: [orders]
+      summary: Owner or admin only. Everyone else gets 404.
+      security: [{ customerSession: [] }, { adminSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/v1/orders/{id}/events:
+    get:
+      tags: [orders]
+      summary: Server-Sent Events status stream. Supports Last-Event-ID.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - { name: token, in: query, required: false, schema: { type: string } }
+        - { name: Last-Event-ID, in: header, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Stream of `status` events whose data is a TimelineEvent
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/v1/me/orders:
+    get:
+      tags: [orders]
+      security: [{ customerSession: [] }]
+      parameters:
+        - { name: tab, in: query, required: false, schema: { type: string, enum: [current, past] } }
+      responses:
+        '200':
+          description: The signed-in customer's orders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderSummaryList' }
+        '401': { $ref: '#/components/responses/Problem' }
+  /api/v1/webhooks/payment:
+    post:
+      tags: [webhooks]
+      parameters:
+        - { name: X-IBM-Signature, in: header, required: true, schema: { type: string }, description: 't=<unix_seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw_body>">' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookEvent' }
+      responses:
+        '200':
+          description: Accepted, including duplicates
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookAck' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/otp/request:
+    post:
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        '202':
+          description: Same response whether or not a code was sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sent]
+                properties:
+                  sent: { const: true }
+        '429': { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/otp/verify:
+    post:
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email: { type: string }
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200':
+          description: Signed in. Sets the session cookie.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerSession' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/auth/login:
+    post:
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Signed in. Sets the admin cookie.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSession' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/orders:
+    get:
+      tags: [admin]
+      security: [{ adminSession: [] }]
+      parameters:
+        - { name: status, in: query, required: false, schema: { $ref: '#/components/schemas/Status' } }
+        - { name: date_from, in: query, required: false, schema: { type: string } }
+        - { name: date_to, in: query, required: false, schema: { type: string } }
+        - { name: q, in: query, required: false, schema: { type: string }, description: Exact order id or email }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200 } }
+      responses:
+        '200':
+          description: One page of orders. PII is masked for the viewer role.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminOrderPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/orders/{id}:
+    get:
+      tags: [admin]
+      security: [{ adminSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order with timeline, webhooks, top-up history and refunds
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminOrderDetail' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/orders/{id}/refund:
+    post:
+      tags: [admin]
+      summary: Finance and above. Partial refunds allowed.
+      security: [{ adminSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefundRequest' }
+      responses:
+        '201':
+          description: Refund accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RefundResult' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/orders/{id}/retry-fulfillment:
+    post:
+      tags: [admin]
+      summary: Support and above
+      security: [{ adminSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Back in the queue
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [order_id, status]
+                properties:
+                  order_id: { type: string }
+                  status: { const: IN_QUEUE }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/audit-logs:
+    get:
+      tags: [admin]
+      summary: Finance and above
+      security: [{ adminSession: [] }]
+      responses:
+        '200':
+          description: Audit entries, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditLogPage' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/reconciliation:
+    post:
+      tags: [admin]
+      summary: Upload a settlement CSV (event_id,order_id,type,amount_satang,settled_at)
+      security: [{ adminSession: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+          text/csv:
+            schema: { type: string }
+      responses:
+        '201':
+          description: Differences by category
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReconciliationResult' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/dashboard:
+    get:
+      tags: [admin]
+      security: [{ adminSession: [] }]
+      responses:
+        '200':
+          description: Live figures
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+  /api/v1/_test/reset:
+    post:
+      tags: [operations]
+      summary: Wipes and re-seeds. Only when APP_ENV=test, otherwise 404.
+      responses:
+        '200':
+          description: Reset done
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reset]
+                properties:
+                  reset: { const: true }
+        '404': { $ref: '#/components/responses/Problem' }
+  /healthz:
+    get:
+      tags: [operations]
+      responses:
+        '200':
+          description: The process is running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { const: ok }
+  /readyz:
+    get:
+      tags: [operations]
+      responses:
+        '200':
+          description: PostgreSQL and Redis are reachable
+          content:
+            application/json:
+              schema: &readiness
+                type: object
+                required: [status, postgres, redis]
+                properties:
+                  status: { type: string }
+                  postgres: { type: boolean }
+                  redis: { type: boolean }
+        '503':
+          description: PostgreSQL or Redis is unavailable
+          content:
+            application/json:
+              schema: *readiness
+  /metrics:
+    get:
+      tags: [operations]
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema: { type: string }

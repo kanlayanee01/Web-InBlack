@@ -6,6 +6,7 @@ from collections.abc import Mapping
 import asyncpg
 
 from app.domain.state_machine import OrderStatus, assert_transition
+from app.obs import request_id_var
 
 
 async def lock_order(conn: asyncpg.Connection, order_id: str) -> asyncpg.Record | None:
@@ -61,8 +62,8 @@ async def enqueue_job(
 ) -> None:
     await conn.execute(
         """
-        INSERT INTO jobs (kind, payload, dedupe_key, max_attempts)
-        VALUES ($1, $2::jsonb, $3, $4)
+        INSERT INTO jobs (kind, payload, dedupe_key, max_attempts, trace_id)
+        VALUES ($1, $2::jsonb, $3, $4, $5)
         ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL AND status IN ('queued','running')
         DO NOTHING
         """,
@@ -70,6 +71,7 @@ async def enqueue_job(
         json.dumps(payload),
         dedupe_key,
         max_attempts,
+        request_id_var.get(),
     )
 
 

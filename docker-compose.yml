@@ -160,6 +160,8 @@ services:
       context: ./backend
       target: test
     image: inblack-backend-test
+    volumes:
+      - ./openapi.yaml:/srv/openapi.yaml:ro
     environment:
       <<: *backend-env
       API_BASE_URL: http://proxy
@@ -171,6 +173,16 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+
+  e2e:
+    profiles: ["e2e"]
+    build: ./e2e
+    image: inblack-e2e
+    environment:
+      ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin-Test-2026}
+    depends_on:
+      proxy:
+        condition: service_started
 
 volumes:
   postgres-data:

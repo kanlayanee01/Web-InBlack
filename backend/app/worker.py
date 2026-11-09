@@ -13,6 +13,7 @@ import smtplib
 import asyncpg
 import httpx
 
+from app.obs import configure_logging, request_id_var
 from app.services import fulfillment, jobs, mail, orders
 from app.settings import Settings, get_settings
 
@@ -134,7 +135,11 @@ class Worker:
                 await jobs.extend_lease(self.pool, job_id, self.id)
 
     async def _run_job(self, job: asyncpg.Record) -> None:
+        # Continues the trace of the request that created this job.
+        token = request_id_var.set(job["trace_id"] or f"job-{job['id']}")
         heartbeat = asyncio.create_task(self._keep_lease(job["id"]))
+        fields = {"job_id": job["id"], "kind": job["kind"], "attempt": job["attempts"]}
+        log.info("job started", extra={"fields": fields})
         try:
             if job["kind"] == "fulfill_order":
                 await self._handle_fulfill(job)
@@ -146,6 +151,7 @@ class Worker:
                 await jobs.bury(self.pool, job["id"], self.id, f"unknown job kind {job['kind']}")
         finally:
             heartbeat.cancel()
+            request_id_var.reset(token)
 
     async def consume(self) -> None:
         while True:
@@ -183,7 +189,7 @@ def _payload(job: asyncpg.Record) -> dict[str, str]:
 
 
 async def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+    configure_logging("worker")
     settings = get_settings()
     concurrency = settings.worker_concurrency
     # One connection per job for its advisory lock, one for its queries, plus the scheduler.

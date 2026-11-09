@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend lint
+        run: docker compose --profile test run --rm --no-deps --build tester ruff check app tests alembic
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - name: Web lint
+        run: npm run lint
+        working-directory: web
+
+  typecheck:
+    needs: lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend types
+        run: docker compose --profile test run --rm --no-deps --build tester mypy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - name: Web types
+        run: npm run typecheck
+        working-directory: web
+
+  unit:
+    needs: typecheck
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend unit tests
+        run: docker compose --profile test run --rm --no-deps --build tester pytest tests/unit -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - name: Web unit tests
+        run: npm test
+        working-directory: web
+
+  integration:
+    needs: unit
+    runs-on: ubuntu-24.04
+    env:
+      APP_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack
+        run: docker compose up --build -d --wait
+      - name: Database rules, concurrency and contract tests
+        run: docker compose --profile test run --rm --build tester pytest tests/integration tests/api -q
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+  e2e:
+    needs: integration
+    runs-on: ubuntu-24.04
+    env:
+      APP_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack
+        run: docker compose up --build -d --wait
+      - name: Playwright
+        run: docker compose --profile e2e run --rm --build e2e
+      - name: Kill containers and verify recovery
+        run: python3 scripts/chaos.py
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+  build-image:
+    needs: e2e
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production images
+        run: docker compose build

@@ -1,4 +1,8 @@
 import asyncio
+import logging
+import os
+import secrets
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -8,7 +12,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from starlette.datastructures import MutableHeaders
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -16,12 +20,17 @@ from app.api.admin_routes import router as admin_router
 from app.api.customer_routes import router as customer_router
 from app.api.routes import router
 from app.domain.errors import DomainError
+from app.obs import REQUEST_LATENCY, configure_logging, render_metrics, request_id_var
 from app.problem import PROBLEM_CONTENT_TYPE, Problem, from_domain, problem_body
 from app.services.ratelimit import RateLimiter
 from app.services.realtime import OrderEventHub
 from app.settings import get_settings
 
 DEPENDENCY_TIMEOUT_SECONDS = 1
+access_log = logging.getLogger("access")
+QUIET_ROUTES = {"/healthz"}  # health checks run every few seconds and would drown the log
+# At import time, so uvicorn's own startup lines are JSON too.
+configure_logging(os.environ.get("INSTANCE_ID", "api"))
 
 
 @asynccontextmanager
@@ -66,18 +75,52 @@ class ResponseHeaders:
             await self.inner(scope, receive, send)
             return
 
+        status = 500
+        streaming = False
+        incoming = Headers(scope=scope).get("x-request-id")
+        request_id = incoming or secrets.token_hex(16)
+
         async def with_headers(message: Message) -> None:
+            nonlocal status, streaming
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
                 for name, value in SECURITY_HEADERS.items():
                     headers.setdefault(name, value)
                 headers["X-Served-By"] = get_settings().instance_id
+                headers["X-Request-ID"] = request_id
+                status = message["status"]
+                streaming = headers.get("content-type", "").startswith("text/event-stream")
             await send(message)
 
-        await self.inner(scope, receive, with_headers)
+        token = request_id_var.set(request_id)
+        started = time.perf_counter()
+        try:
+            await self.inner(scope, receive, with_headers)
+        finally:
+            route = scope.get("route")
+            template = getattr(route, "path", "unmatched")
+            if not streaming:
+                elapsed = time.perf_counter() - started
+                REQUEST_LATENCY.labels(scope["method"], template, str(status)).observe(elapsed)
+            if not streaming and template not in QUIET_ROUTES:
+                access_log.info(
+                    "request",
+                    extra={
+                        "fields": {
+                            "method": scope["method"],
+                            "route": template,
+                            "status": status,
+                            "duration_ms": round(elapsed * 1000, 1),
+                        }
+                    },
+                )
+            request_id_var.reset(token)
 
 
-app = FastAPI(title="InBlack Top-Up API", lifespan=lifespan)
+# The contract lives in openapi.yaml; the generated schema would be incomplete and could mislead.
+app = FastAPI(
+    title="InBlack Top-Up API", lifespan=lifespan, openapi_url=None, docs_url=None, redoc_url=None
+)
 app.add_middleware(ResponseHeaders)
 
 
@@ -129,6 +172,12 @@ async def handle_http_error(_: Request, error: StarletteHTTPException) -> Respon
     return _problem_response(Problem(error.status_code, code, str(error.detail)))
 
 
+@app.exception_handler(Exception)
+async def handle_unexpected(_: Request, error: Exception) -> Response:
+    logging.getLogger("api").error("unhandled error", exc_info=error)
+    return _problem_response(Problem(500, "INTERNAL_ERROR", "Something went wrong"))
+
+
 @app.exception_handler(asyncpg.PostgresError)
 async def handle_database_error(_: Request, error: asyncpg.PostgresError) -> Response:
     if error.sqlstate == "IB001":
@@ -152,6 +201,12 @@ async def handle_connection_error(_: Request, __: OSError) -> Response:
 @app.exception_handler(asyncpg.InterfaceError)
 async def handle_interface_error(_: Request, __: asyncpg.InterfaceError) -> Response:
     return _unavailable()
+
+
+@app.get("/metrics")
+async def metrics(request: Request) -> Response:
+    body, content_type = await render_metrics(request.app.state.db)
+    return Response(body, media_type=content_type.split(";")[0])
 
 
 @app.get("/healthz")

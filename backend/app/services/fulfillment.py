@@ -17,6 +17,7 @@ import asyncpg
 import httpx
 
 from app.domain.state_machine import OrderStatus
+from app.obs import request_id_var
 from app.services import inventory
 from app.services.transitions import enqueue_job, lock_order, move
 
@@ -50,13 +51,17 @@ class Answer:
     detail: str
 
 
+def _trace_headers() -> dict[str, str]:
+    return {"X-Request-ID": request_id_var.get()}
+
+
 class GameClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self._client = client
 
     async def lookup(self, reference: str) -> Answer:
         try:
-            response = await self._client.get(f"/topups/{reference}")
+            response = await self._client.get(f"/topups/{reference}", headers=_trace_headers())
         except httpx.HTTPError as error:
             return Answer(Lookup.UNREACHABLE, None, type(error).__name__)
         if response.status_code == 404:
@@ -79,6 +84,7 @@ class GameClient:
             response = await self._client.post(
                 "/topups",
                 json={"reference": reference, "game_uid": game_uid, "sku": sku, "qty": qty},
+                headers=_trace_headers(),
             )
         except httpx.HTTPError as error:
             return Answer(Lookup.UNREACHABLE, None, type(error).__name__)
