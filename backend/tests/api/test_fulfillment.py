@@ -55,6 +55,9 @@ async def test_paid_order_is_delivered_exactly_once(client, db, game, send_webho
     rows = await db.fetch(
         "SELECT to_status FROM order_events WHERE order_id = $1 ORDER BY seq", order["id"]
     )
+    assert await db.fetchval(
+        "SELECT count(*) FROM jobs WHERE dedupe_key = $1", f"receipt:{order['id']}"
+    ) == 1
     assert [r["to_status"] for r in rows] == [
         "PENDING_PAYMENT",
         "PAID",

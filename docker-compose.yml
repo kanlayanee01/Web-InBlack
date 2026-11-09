@@ -7,6 +7,7 @@ x-backend-env: &backend-env
   ORDER_TTL_SECONDS: ${ORDER_TTL_SECONDS:-900}
   PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-whsec_test_inblackm_2026}
   SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin-Test-2026}
+  SESSION_SECRET: ${SESSION_SECRET:-dev_only_session_secret_change_me}
 
 x-api: &api
   build:
@@ -150,6 +151,9 @@ services:
       API_BASE_URL: http://proxy
       MOCK_GAME_TEST_URL: http://mock-game:8000
       MOCK_PAY_TEST_URL: http://mock-pay:8000
+      API_1_URL: http://api-1:8000
+      API_2_URL: http://api-2:8000
+      MAILPIT_URL: http://mailpit:8025
     depends_on:
       migrate:
         condition: service_completed_successfully

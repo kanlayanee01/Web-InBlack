@@ -154,6 +154,85 @@ def run_scenario(
     return _verify(name, orders, settled, seconds)
 
 
+def redis_outage_scenario() -> list[str]:
+    """Rate limiting must stay in force, and the API must keep answering, without Redis."""
+    name = "redis killed"
+    print(f"\n--- {name}")
+    assert http("POST", f"{API}/api/v1/_test/reset")[0] == 200
+    order_id, amount = create_order()
+    kill("redis")
+    time.sleep(1)
+    problems = []
+    created_while_down = create_order()[0]
+    body = {"order_id": order_id, "email": "nobody@example.com"}
+    codes = [post_json(f"{API}/api/v1/orders/track", body)[0] for _ in range(14)]
+    print(f"track responses without redis: {codes}")
+    if any(code >= 500 for code in codes):
+        problems.append(f"track failed without redis: {codes}")
+    if 429 not in codes:
+        problems.append("rate limit was not enforced without redis")
+    ready = http("GET", f"{API}/readyz")[0]
+    if ready != 503:
+        problems.append(f"/readyz returned {ready} without redis, expected 503")
+    start("redis")
+    time.sleep(3)
+    pay(order_id, amount)
+    settled = False
+    for _ in range(40):
+        if sql(f"SELECT status FROM orders WHERE id = '{order_id}'") == "COMPLETED":
+            settled = True
+            break
+        time.sleep(0.5)
+    if not settled:
+        problems.append("order did not complete after redis came back")
+    if not created_while_down:
+        problems.append("could not create an order without redis")
+    print(f"result: {'PASS' if not problems else 'FAIL'}")
+    return [f"{name}: {problem}" for problem in problems]
+
+
+def stream_survives_database_restart() -> list[str]:
+    """A tracking page left open must still get updates after Postgres restarts."""
+    name = "SSE open across a postgres restart"
+    print(f"\n--- {name}")
+    assert http("POST", f"{API}/api/v1/_test/reset")[0] == 200
+    body = {
+        "items": [{"sku": "DIAMOND-1000", "qty": 1}],
+        "email": f"{uuid.uuid4().hex}@example.com",
+        "game_uid": "123456789",
+        "payment_method": "promptpay",
+    }
+    status, raw = post_json(f"{API}/api/v1/orders", body, {"Idempotency-Key": uuid.uuid4().hex})
+    assert status == 201
+    created = json.loads(raw)
+    url = f"{API}/api/v1/orders/{created['id']}/events?token={created['tracking_token']}"
+    seen: list[str] = []
+
+    def read_stream() -> None:
+        with urllib.request.urlopen(url, timeout=90) as response:
+            for line in response:
+                if line.startswith(b"data: "):
+                    seen.append(json.loads(line[6:])["status"])
+                    if seen[-1] == "COMPLETED":
+                        return
+
+    reader = threading.Thread(target=read_stream, daemon=True)
+    reader.start()
+    time.sleep(1)
+    kill("postgres")
+    time.sleep(3)
+    start("postgres")
+    time.sleep(6)
+    pay(created["id"], created["total_satang"])
+    reader.join(timeout=40)
+    print(f"statuses received: {seen}")
+    problems = [] if seen[-1:] == ["COMPLETED"] else [f"stream stopped at {seen}"]
+    if len(seen) != len(set(seen)):
+        problems.append(f"stream repeated an event: {seen}")
+    print(f"result: {'PASS' if not problems else 'FAIL'}")
+    return [f"{name}: {problem}" for problem in problems]
+
+
 def _safe_counts() -> str:
     try:
         return str(count_by_status())
@@ -207,12 +286,17 @@ def main() -> int:
         with lock:
             failures.extend(result)
 
+    if not only or "redis" in only:
+        failures.extend(redis_outage_scenario())
+    if not only or "SSE" in only:
+        failures.extend(stream_survives_database_restart())
+
     print("\n=== summary")
     if failures:
         for failure in failures:
             print("FAIL", failure)
         return 1
-    print(f"all {len(scenarios)} scenarios passed")
+    print("all scenarios passed")
     return 0
 
 

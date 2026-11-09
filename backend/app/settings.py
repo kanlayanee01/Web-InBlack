@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     mock_game_url: str = "http://mock-game:8000"
     game_timeout_seconds: int = 5
     worker_concurrency: int = 8
+    session_secret: str
+    smtp_host: str = "mailpit"
+    smtp_port: int = 1025
+    mail_from: str = "InBlack <no-reply@inblackm.test>"
 
 
 @lru_cache

@@ -1,14 +1,17 @@
+import contextlib
 import time
 
 import asyncpg
+import redis.asyncio as redis
 from fastapi import APIRouter, Header, Request, Response
 from pydantic import ValidationError
 
+from app.api import deps
 from app.api.schemas import CreateOrderRequest, PaymentWebhook, QuoteRequest
 from app.domain.errors import DomainError
 from app.problem import Problem, dumps, from_domain
 from app.seed import seed
-from app.services import idempotency, orders, payments
+from app.services import auth, idempotency, orders, payments
 from app.settings import get_settings
 
 router = APIRouter(prefix="/api/v1")
@@ -101,17 +104,21 @@ async def create_order(
     raw_body = await request.body()
     body = CreateOrderRequest.model_validate_json(raw_body)
     settings = get_settings()
+    session = await deps.optional_customer(request)
     new_order = orders.NewOrder(
         items=_items(body),
         email=body.email,
         game_uid=body.game_uid,
         payment_method=body.payment_method,
         voucher_code=body.voucher_code,
+        customer_id=session["customer_id"] if session is not None else None,
     )
 
     async def handler(conn: asyncpg.Connection) -> tuple[int, bytes]:
         order_id = await orders.create_order(conn, new_order, settings.order_ttl_seconds)
         payload = await orders.fetch_order_json(conn, order_id, settings.mock_pay_public_url)
+        assert payload is not None
+        payload["tracking_token"] = auth.make_tracking_token(settings.session_secret, order_id)
         return 201, dumps(payload)
 
     status, response_body = await idempotency.run_once(
@@ -154,4 +161,6 @@ async def test_reset(request: Request) -> Response:
     async with request.app.state.db.acquire() as conn, conn.transaction():
         await conn.execute(f"TRUNCATE {RESETTABLE_TABLES} RESTART IDENTITY CASCADE")
         await seed(conn, settings.seed_admin_password)
+    with contextlib.suppress(redis.RedisError, OSError, TimeoutError):
+        await request.app.state.redis.flushdb()
     return Response(dumps({"reset": True}), media_type=JSON)

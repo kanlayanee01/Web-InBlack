@@ -8,11 +8,17 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.api.admin_routes import router as admin_router
+from app.api.customer_routes import router as customer_router
 from app.api.routes import router
 from app.domain.errors import DomainError
 from app.problem import PROBLEM_CONTENT_TYPE, Problem, from_domain, problem_body
+from app.services.ratelimit import RateLimiter
+from app.services.realtime import OrderEventHub
 from app.settings import get_settings
 
 DEPENDENCY_TIMEOUT_SECONDS = 1
@@ -29,17 +35,55 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         socket_connect_timeout=DEPENDENCY_TIMEOUT_SECONDS,
         socket_timeout=DEPENDENCY_TIMEOUT_SECONDS,
     )
+    app.state.limiter = RateLimiter(app.state.redis)
+    app.state.hub = OrderEventHub(settings.database_url)
+    hub_task = asyncio.create_task(app.state.hub.run())
     try:
         yield
     finally:
+        hub_task.cancel()
         await app.state.redis.aclose()
         await app.state.db.close()
 
 
+SECURITY_HEADERS = {
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+}
+
+
+class ResponseHeaders:
+    """Plain ASGI middleware, because BaseHTTPMiddleware buffers and interferes with SSE."""
+
+    def __init__(self, inner: ASGIApp) -> None:
+        self.inner = inner
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.inner(scope, receive, send)
+            return
+
+        async def with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                for name, value in SECURITY_HEADERS.items():
+                    headers.setdefault(name, value)
+                headers["X-Served-By"] = get_settings().instance_id
+            await send(message)
+
+        await self.inner(scope, receive, with_headers)
+
+
 app = FastAPI(title="InBlack Top-Up API", lifespan=lifespan)
+app.add_middleware(ResponseHeaders)
 
 
 app.include_router(router)
+app.include_router(customer_router)
+app.include_router(admin_router)
 
 
 def _problem_response(problem: Problem) -> Response:
@@ -108,13 +152,6 @@ async def handle_connection_error(_: Request, __: OSError) -> Response:
 @app.exception_handler(asyncpg.InterfaceError)
 async def handle_interface_error(_: Request, __: asyncpg.InterfaceError) -> Response:
     return _unavailable()
-
-
-@app.middleware("http")
-async def identify_replica(request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
-    response: Response = await call_next(request)
-    response.headers["X-Served-By"] = get_settings().instance_id
-    return response
 
 
 @app.get("/healthz")

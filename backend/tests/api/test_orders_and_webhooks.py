@@ -131,19 +131,19 @@ async def test_signature_is_checked_against_raw_bytes(client):
     ],
 )
 async def test_bad_signatures_are_rejected(client, headers):
-    raw = webhook_bytes("ORD-1000000000000-030", 100)
+    raw = webhook_bytes("ORD-1000000000000-081", 100)
     response = await client.post(HOOK, content=raw, headers=headers)
     assert (response.status_code, response.json()["code"]) == (401, "INVALID_SIGNATURE")
 
 
 async def test_wrong_secret_is_rejected(client):
-    raw = webhook_bytes("ORD-1000000000000-030", 100)
+    raw = webhook_bytes("ORD-1000000000000-081", 100)
     response = await client.post(HOOK, content=raw, headers=signed(raw, secret="whsec_wrong"))
     assert response.status_code == 401
 
 
 async def test_tampered_body_is_rejected(client):
-    raw = webhook_bytes("ORD-1000000000000-030", 100)
+    raw = webhook_bytes("ORD-1000000000000-081", 100)
     response = await client.post(
         HOOK, content=raw.replace(b"100", b"999"), headers=signed(raw)
     )
@@ -154,13 +154,13 @@ async def test_tampered_body_is_rejected(client):
     ("skew", "accepted"), [(-290, True), (290, True), (-310, False), (310, False)]
 )
 async def test_timestamp_tolerance(client, skew, accepted):
-    raw = webhook_bytes("ORD-1000000000000-030", 100)
+    raw = webhook_bytes("ORD-1000000000000-081", 100)
     response = await client.post(HOOK, content=raw, headers=signed(raw, int(time.time()) + skew))
     assert response.status_code == (200 if accepted else 401)
 
 
 async def test_unknown_order_is_acknowledged_and_kept_for_reconciliation(client, db, send_webhook):
-    response = await send_webhook("ORD-1000000000000-030", 100, event_id="evt_unknown")
+    response = await send_webhook("ORD-1000000000000-081", 100, event_id="evt_unknown")
     assert (response.status_code, response.json()["outcome"]) == (200, "unknown_order")
     assert await db.fetchval(
         "SELECT outcome FROM webhook_events WHERE event_id = 'evt_unknown'"

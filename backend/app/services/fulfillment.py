@@ -18,7 +18,7 @@ import httpx
 
 from app.domain.state_machine import OrderStatus
 from app.services import inventory
-from app.services.transitions import lock_order, move
+from app.services.transitions import enqueue_job, lock_order, move
 
 ACTOR = "system:worker"
 S = OrderStatus
@@ -171,6 +171,7 @@ async def _complete(pool: asyncpg.Pool, order_id: str) -> None:
         # Anything else means a person took over (NEEDS_REVIEW), so the order is left alone.
         if order is not None and order["status"] == S.IN_PROGRESS:
             await move(conn, order_id, S.IN_PROGRESS, S.COMPLETED, ACTOR, "Top-up delivered")
+            await enqueue_job(conn, "send_receipt", {"order_id": order_id}, f"receipt:{order_id}")
 
 
 async def _conclude(pool: asyncpg.Pool, order_id: str, states: dict[object, LineState]) -> str:

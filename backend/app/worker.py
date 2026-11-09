@@ -8,11 +8,12 @@ import contextlib
 import json
 import logging
 import secrets
+import smtplib
 
 import asyncpg
 import httpx
 
-from app.services import fulfillment, jobs, orders
+from app.services import fulfillment, jobs, mail, orders
 from app.settings import Settings, get_settings
 
 log = logging.getLogger("worker")
@@ -88,6 +89,44 @@ class Worker:
             return type(error).__name__
         return None if response.is_success else f"provider returned {response.status_code}"
 
+    async def _handle_receipt(self, job: asyncpg.Record) -> None:
+        order = await self.pool.fetchrow(
+            "SELECT * FROM orders WHERE id = $1", _payload(job)["order_id"]
+        )
+        if order is None:
+            await jobs.complete(self.pool, job["id"], self.id)
+            return
+        lines = await self.pool.fetch(
+            "SELECT name, qty, unit_price_satang FROM order_items WHERE order_id = $1 "
+            "ORDER BY line_no",
+            order["id"],
+        )
+        body = "\n".join(
+            [
+                f"ใบเสร็จออเดอร์ {order['id']}",
+                *(
+                    f"{line['name']} x{line['qty']}  {mail.baht(line['unit_price_satang'])} บาท"
+                    for line in lines
+                ),
+                f"ส่วนลด {mail.baht(order['discount_satang'])} บาท",
+                f"ค่าธรรมเนียม {mail.baht(order['fee_satang'])} บาท",
+                f"ยอดรวม {mail.baht(order['total_satang'])} บาท",
+                f"รวมภาษีมูลค่าเพิ่ม {mail.baht(order['vat_satang'])} บาท",
+            ]
+        )
+        try:
+            await mail.send(self.settings, order["email"], f"ใบเสร็จ {order['id']}", body)
+        except (OSError, smtplib.SMTPException) as error:
+            if job["attempts"] >= job["max_attempts"]:
+                await jobs.bury(self.pool, job["id"], self.id, type(error).__name__)
+            else:
+                delay = jobs.backoff_ms(
+                    job["attempts"], REFUND_BACKOFF_BASE_MS, REFUND_BACKOFF_CAP_MS
+                )
+                await jobs.retry_later(self.pool, job["id"], self.id, delay, type(error).__name__)
+            return
+        await jobs.complete(self.pool, job["id"], self.id)
+
     async def _keep_lease(self, job_id: int) -> None:
         while True:
             await asyncio.sleep(HEARTBEAT_SECONDS)
@@ -101,6 +140,8 @@ class Worker:
                 await self._handle_fulfill(job)
             elif job["kind"] == "refund_provider":
                 await self._handle_refund(job)
+            elif job["kind"] == "send_receipt":
+                await self._handle_receipt(job)
             else:
                 await jobs.bury(self.pool, job["id"], self.id, f"unknown job kind {job['kind']}")
         finally:
