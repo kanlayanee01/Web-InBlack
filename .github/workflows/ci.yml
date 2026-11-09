@@ -72,7 +72,17 @@ jobs:
       - name: Start the stack
         run: docker compose up --build -d --wait
       - name: Database rules, concurrency and contract tests
-        run: docker compose --profile test run --rm --build tester pytest tests/integration tests/api -q
+        shell: bash
+        run: |
+          set -o pipefail
+          docker compose --profile test run --rm --build tester \
+            pytest tests/integration tests/api -q --tb=short 2>&1 | tee pytest.log
+      - name: Report failed tests
+        if: failure()
+        shell: bash
+        run: |
+          grep -E '^(FAILED|ERROR) ' pytest.log | while read -r line; do echo "::error::$line"; done
+          grep -E '^E  ' pytest.log | head -8 | while read -r line; do echo "::error::$line"; done
       - name: Service logs on failure
         if: failure()
         run: docker compose logs --tail=200
