@@ -87,7 +87,7 @@ services:
     image: nginx:1.27-alpine
     restart: always
     volumes:
-      - ./proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "${PROXY_PORT:-8088}:80"
     depends_on:
@@ -102,7 +102,9 @@ services:
       context: ./backend
       target: test
     image: inblack-backend-test
-    environment: *backend-env
+    environment:
+      <<: *backend-env
+      API_BASE_URL: http://proxy
     depends_on:
       migrate:
         condition: service_completed_successfully

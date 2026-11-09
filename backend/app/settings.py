@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     order_ttl_seconds: int = 900
     payment_webhook_secret: str
     seed_admin_password: str = ""
+    mock_pay_public_url: str = "http://localhost:8090"
 
 
 @lru_cache
