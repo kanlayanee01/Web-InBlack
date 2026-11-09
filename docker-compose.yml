@@ -127,6 +127,18 @@ services:
       - "${MOCK_PAY_PORT:-8090}:8000"
     healthcheck: *python-health
 
+  web:
+    build: ./web
+    restart: always
+    environment:
+      API_INTERNAL_URL: http://proxy
+      SITE_URL: ${SITE_URL:-http://localhost:8088}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/th/track').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+
   proxy:
     image: nginx:1.27-alpine
     restart: always
@@ -135,6 +147,8 @@ services:
     ports:
       - "${PROXY_PORT:-8088}:80"
     depends_on:
+      web:
+        condition: service_healthy
       api-1:
         condition: service_healthy
       api-2:

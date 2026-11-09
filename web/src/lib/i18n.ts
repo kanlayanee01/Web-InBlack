@@ -1,0 +1,233 @@
+import type { Badge, PaymentMethod } from "./types";
+
+export const LOCALES = ["th", "en"] as const;
+export type Locale = (typeof LOCALES)[number];
+
+export function isLocale(value: string): value is Locale {
+  return (LOCALES as readonly string[]).includes(value);
+}
+
+const th = {
+  brand: "InBlack",
+  nav: { catalog: "สินค้า", track: "ติดตามออเดอร์", myOrders: "ออเดอร์ของฉัน" },
+  otherLocale: "English",
+  footer: "ระบบสาธิตเพื่อการทดสอบ ไม่มีการเรียกเก็บเงินจริง",
+  home: {
+    title: "เติมเกมและซื้อแพ็กเกจ",
+    lead: "เลือกสินค้า ชำระเงิน แล้วติดตามสถานะได้ทันทีจนเติมเข้าเกม",
+    buy: "ซื้อ",
+  },
+  product: {
+    price: "ราคา",
+    stock: "คงเหลือ",
+    unlimited: "พร้อมจำหน่าย",
+    soldOut: "สินค้าหมด",
+    buy: "ซื้อเลย",
+    perOrder: (n: number) => `จำกัด ${n} ชิ้นต่อออเดอร์`,
+    perEmail: (n: number) => `จำกัด ${n} ชิ้นต่ออีเมล`,
+    vatIncluded: "ราคารวม VAT แล้ว",
+  },
+  checkout: {
+    title: "ชำระเงิน",
+    items: "สินค้า",
+    quantity: "จำนวน",
+    email: "อีเมล",
+    emailHint: "ใช้สำหรับติดตามออเดอร์และรับใบเสร็จ",
+    gameUid: "Game UID",
+    gameUidHint: "ตัวอักษรภาษาอังกฤษ ตัวเลข - หรือ _ จำนวน 4 ถึง 32 ตัว",
+    voucher: "โค้ดส่วนลด",
+    payment: "ช่องทางชำระเงิน",
+    summary: "สรุปยอด",
+    subtotal: "ยอดสินค้า",
+    discount: "ส่วนลด",
+    fee: "ค่าธรรมเนียม",
+    total: "ยอดชำระ",
+    vat: "VAT ที่รวมอยู่แล้ว",
+    submit: "สร้างออเดอร์",
+    submitting: "กำลังสร้างออเดอร์",
+    calculating: "กำลังคำนวณ",
+    pickItem: "เลือกสินค้าอย่างน้อย 1 รายการ",
+    invalidEmail: "กรุณากรอกอีเมลให้ถูกต้อง",
+    invalidUid: "รูปแบบ Game UID ไม่ถูกต้อง",
+  },
+  methods: {
+    promptpay: "PromptPay QR (ไม่มีค่าธรรมเนียม)",
+    truemoney: "TrueMoney Wallet (1.5%)",
+    card: "บัตรเครดิต (2.9% + ฿3.00)",
+  } satisfies Record<PaymentMethod, string>,
+  track: {
+    title: "ติดตามออเดอร์",
+    orderId: "เลขออเดอร์",
+    orderIdHint: "เช่น ORD-2587965432159-229",
+    email: "อีเมลที่ใช้สั่งซื้อ",
+    search: "ค้นหา",
+    searching: "กำลังค้นหา",
+    invalidId: "เลขออเดอร์ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง",
+    notFound: "ไม่พบออเดอร์ที่ตรงกับเลขออเดอร์และอีเมลนี้",
+    timeline: "ลำดับสถานะ",
+    pay: "ไปหน้าชำระเงิน",
+    expiresAt: "ชำระภายใน",
+    reconnecting: "การเชื่อมต่อหลุด กำลังเชื่อมต่อใหม่",
+    statusChanged: (label: string) => `สถานะออเดอร์เปลี่ยนเป็น ${label}`,
+    items: "รายการ",
+    gameUid: "Game UID",
+    another: "ค้นหาออเดอร์อื่น",
+  },
+  my: {
+    title: "ออเดอร์ของฉัน",
+    email: "อีเมล",
+    sendCode: "ส่งรหัส OTP",
+    sending: "กำลังส่ง",
+    code: "รหัส OTP 6 หลัก",
+    codeHint: "ส่งรหัสไปที่อีเมลแล้ว รหัสหมดอายุใน 5 นาที",
+    verify: "เข้าสู่ระบบ",
+    verifying: "กำลังตรวจสอบ",
+    current: "ออเดอร์ปัจจุบัน",
+    past: "ที่ผ่านมา",
+    empty: "ยังไม่มีออเดอร์ในหมวดนี้",
+    logout: "ออกจากระบบ",
+    invalidCode: "รหัสไม่ถูกต้องหรือหมดอายุแล้ว",
+    locked: "กรอกรหัสผิดหลายครั้ง กรุณาลองใหม่ในภายหลัง",
+  },
+  errors: {
+    generic: "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
+    rateLimited: (seconds: string) => `ลองบ่อยเกินไป กรุณารอ ${seconds} วินาที`,
+    OUT_OF_STOCK: "สินค้าหมดแล้ว",
+    PER_CUSTOMER_LIMIT: "เกินจำนวนที่ซื้อได้ต่ออีเมล",
+    PER_ORDER_LIMIT: "เกินจำนวนที่ซื้อได้ต่อออเดอร์",
+    VOUCHER_NOT_FOUND: "ไม่พบโค้ดส่วนลดนี้",
+    VOUCHER_EXHAUSTED: "โค้ดส่วนลดนี้ถูกใช้ครบแล้ว",
+    VOUCHER_ALREADY_USED: "อีเมลนี้ใช้โค้ดส่วนลดนี้ไปแล้ว",
+    VOUCHER_MIN_SPEND: "ยอดสินค้ายังไม่ถึงขั้นต่ำของโค้ดส่วนลด",
+  } as Record<string, unknown>,
+  badges: {
+    awaiting_payment: "รอชำระเงิน",
+    in_queue: "อยู่ในคิว",
+    processing: "กำลังดำเนินการ",
+    completed: "เสร็จสิ้น",
+    expired: "หมดอายุ",
+    payment_failed: "ชำระเงินไม่สำเร็จ",
+    refunded: "คืนเงินแล้ว",
+    action_needed: "รอเจ้าหน้าที่ตรวจสอบ",
+  } satisfies Record<Badge, string>,
+};
+
+type Dictionary = typeof th;
+
+const en: Dictionary = {
+  brand: "InBlack",
+  nav: { catalog: "Products", track: "Track order", myOrders: "My orders" },
+  otherLocale: "ไทย",
+  footer: "Demo system for testing. No real money is charged.",
+  home: {
+    title: "Game top-ups and packages",
+    lead: "Pick a product, pay, and follow your order live until it reaches your game.",
+    buy: "Buy",
+  },
+  product: {
+    price: "Price",
+    stock: "Remaining",
+    unlimited: "In stock",
+    soldOut: "Sold out",
+    buy: "Buy now",
+    perOrder: (n) => `Limit ${n} per order`,
+    perEmail: (n) => `Limit ${n} per email`,
+    vatIncluded: "VAT included",
+  },
+  checkout: {
+    title: "Checkout",
+    items: "Items",
+    quantity: "Quantity",
+    email: "Email",
+    emailHint: "Used to track your order and send your receipt",
+    gameUid: "Game UID",
+    gameUidHint: "4 to 32 letters, digits, - or _",
+    voucher: "Voucher code",
+    payment: "Payment method",
+    summary: "Summary",
+    subtotal: "Subtotal",
+    discount: "Discount",
+    fee: "Fee",
+    total: "Total",
+    vat: "VAT included",
+    submit: "Place order",
+    submitting: "Placing order",
+    calculating: "Calculating",
+    pickItem: "Choose at least one item",
+    invalidEmail: "Enter a valid email address",
+    invalidUid: "This Game UID is not valid",
+  },
+  methods: {
+    promptpay: "PromptPay QR (no fee)",
+    truemoney: "TrueMoney Wallet (1.5%)",
+    card: "Credit card (2.9% + ฿3.00)",
+  },
+  track: {
+    title: "Track order",
+    orderId: "Order number",
+    orderIdHint: "For example ORD-2587965432159-229",
+    email: "Email used for the order",
+    search: "Search",
+    searching: "Searching",
+    invalidId: "This order number is not valid. Please check it.",
+    notFound: "No order matches this number and email",
+    timeline: "Status history",
+    pay: "Go to payment",
+    expiresAt: "Pay before",
+    reconnecting: "Connection lost, reconnecting",
+    statusChanged: (label) => `Order status changed to ${label}`,
+    items: "Items",
+    gameUid: "Game UID",
+    another: "Find another order",
+  },
+  my: {
+    title: "My orders",
+    email: "Email",
+    sendCode: "Send OTP",
+    sending: "Sending",
+    code: "6-digit OTP",
+    codeHint: "A code was sent to your email. It expires in 5 minutes.",
+    verify: "Sign in",
+    verifying: "Checking",
+    current: "Current",
+    past: "Past",
+    empty: "No orders here yet",
+    logout: "Sign out",
+    invalidCode: "The code is wrong or has expired",
+    locked: "Too many wrong codes. Please try again later.",
+  },
+  errors: {
+    generic: "Something went wrong. Please try again.",
+    rateLimited: (seconds: string) => `Too many attempts. Please wait ${seconds} seconds.`,
+    OUT_OF_STOCK: "This item is sold out",
+    PER_CUSTOMER_LIMIT: "Over the limit per email",
+    PER_ORDER_LIMIT: "Over the limit per order",
+    VOUCHER_NOT_FOUND: "This voucher does not exist",
+    VOUCHER_EXHAUSTED: "This voucher has been fully used",
+    VOUCHER_ALREADY_USED: "This email has already used the voucher",
+    VOUCHER_MIN_SPEND: "The order does not reach the voucher minimum",
+  },
+  badges: {
+    awaiting_payment: "Awaiting payment",
+    in_queue: "In queue",
+    processing: "Processing",
+    completed: "Completed",
+    expired: "Expired",
+    payment_failed: "Payment failed",
+    refunded: "Refunded",
+    action_needed: "Under review",
+  },
+};
+
+const dictionaries: Record<Locale, Dictionary> = { th, en };
+
+export function dict(locale: Locale): Dictionary {
+  return dictionaries[locale];
+}
+
+export function errorMessage(locale: Locale, code: string): string {
+  const message = dictionaries[locale].errors[code];
+  return typeof message === "string"
+    ? message
+    : (dictionaries[locale].errors.generic as string);
+}
