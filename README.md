@@ -83,10 +83,11 @@ make test
 - API ตามข้อ 8.1, OTP, RBAC, CSRF, rate limit, reconciliation
 - SSE ข้าม replica พร้อม `Last-Event-ID`
 - หน้าเว็บตามข้อ 9.2, TH/EN, Light/Dark, ISR, JSON-LD, OG image
+- แบบจาก Claude Design export เป็น HTML และ PDF ใน [design/](design/README.md)
+- ตะกร้าสินค้า และปุ่มสลับโหมดสว่าง/มืดที่จำค่าได้
 
 **ยังไม่ได้ทำหรือทำไม่ครบ**
 
-- ไฟล์ export ของแบบจาก Claude Design ในโฟลเดอร์ `design/` (ดูสถานะล่าสุดที่ [design/README.md](design/README.md))
 - โบนัส: แอป Mobile, OpenTelemetry/Jaeger และ deploy จริง
 - GitHub Actions เขียนแล้ว แต่ต้อง push ขึ้น GitHub ก่อนจึงจะรันจริง
 - หน้าจอ superadmin แก้ได้เฉพาะชื่อและราคาสินค้า ส่วนโค้ดส่วนลดมีแค่ API เปิดปิด และยังไม่มี API สร้างโค้ดใหม่
