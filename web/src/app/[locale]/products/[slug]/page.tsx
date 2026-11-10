@@ -3,9 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { LiveStock } from "./live-stock";
+import { AddToCart } from "@/components/cart-controls";
 import { ProductIcon } from "@/components/icons";
 import { buildSlugs, getProduct, siteUrl } from "@/lib/catalog";
 import { dict, isLocale, LOCALES } from "@/lib/i18n";
+import { orderLimit } from "@/lib/limits";
 import { decimalPrice, formatBaht } from "@/lib/money";
 
 export const revalidate = 30;
@@ -100,9 +102,21 @@ export default async function ProductPage({ params }: Props) {
       {product.max_qty_per_email !== null ? (
         <p className="muted small">{t.product.perEmail(product.max_qty_per_email)}</p>
       ) : null}
-      <Link className="btn" href={`/${locale}/checkout?sku=${encodeURIComponent(product.sku)}`}>
-        {t.product.buy}
-      </Link>
+      <div className="buy-row" style={{ maxWidth: 420 }}>
+        <AddToCart
+          sku={product.sku}
+          name={product.name}
+          limit={orderLimit(product)}
+          className="btn btn-secondary"
+          labels={{ add: t.cart.add, added: t.cart.added, limitReached: t.cart.limitReached, soldOut: t.cart.soldOut }}
+        />
+        <Link
+          className="btn"
+          href={`/${locale}/checkout?sku=${encodeURIComponent(product.sku)}`}
+        >
+          {t.product.buy}
+        </Link>
+      </div>
     </article>
   );
 }

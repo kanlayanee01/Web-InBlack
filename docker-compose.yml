@@ -8,6 +8,8 @@ x-backend-env: &backend-env
   PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-whsec_test_inblackm_2026}
   SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin-Test-2026}
   SESSION_SECRET: ${SESSION_SECRET:-dev_only_session_secret_change_me}
+  # Where browsers open the payment page. Set to the PC's LAN address to test from a phone.
+  MOCK_PAY_PUBLIC_URL: ${MOCK_PAY_PUBLIC_URL:-http://localhost:8090}
 
 x-api: &api
   build:
@@ -121,6 +123,7 @@ services:
     environment:
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-whsec_test_inblackm_2026}
       WEBHOOK_URL: http://proxy/api/v1/webhooks/payment
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-http://localhost:8088}
     volumes:
       - mock-pay-data:/data
     ports:

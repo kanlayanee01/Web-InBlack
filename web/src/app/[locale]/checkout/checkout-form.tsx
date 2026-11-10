@@ -1,11 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { Field, PriceSummary, Spinner } from "@/components/ui";
 import { api, ApiError, randomKey } from "@/lib/api";
+import { clearCart, readCart, setQuantity, useCart } from "@/lib/cart";
 import { dict, errorMessage, type Locale } from "@/lib/i18n";
+import { orderLimit } from "@/lib/limits";
 import { formatBaht } from "@/lib/money";
 import type { Order, PaymentMethod, Product, Quote } from "@/lib/types";
 
@@ -13,7 +16,6 @@ const METHODS: PaymentMethod[] = ["promptpay", "truemoney", "card"];
 const EMAIL = /^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$/;
 const GAME_UID = /^[A-Za-z0-9_-]{4,32}$/;
 const QUOTE_DEBOUNCE_MS = 250;
-const MAX_QTY = 99;
 const VOUCHER_ERRORS = ["VOUCHER_NOT_FOUND", "VOUCHER_MIN_SPEND"];
 
 interface Errors {
@@ -27,11 +29,7 @@ export function CheckoutForm({ locale, products }: { locale: Locale; products: P
   const t = dict(locale);
   const router = useRouter();
   const preselected = useSearchParams().get("sku");
-  const [quantities, setQuantities] = useState<Record<string, number>>(() =>
-    preselected !== null && products.some((p) => p.sku === preselected)
-      ? { [preselected]: 1 }
-      : {},
-  );
+  const cart = useCart();
   const [email, setEmail] = useState("");
   const [gameUid, setGameUid] = useState("");
   const [voucher, setVoucher] = useState("");
@@ -43,14 +41,33 @@ export function CheckoutForm({ locale, products }: { locale: Locale; products: P
   const [submitting, setSubmitting] = useState(false);
   // The same key is reused until the form changes, so a retry after a lost response is safe.
   const attempt = useRef<{ body: string; key: string } | null>(null);
+  // A signed-in customer must send the CSRF token with every request that changes data.
+  const csrf = useRef<string | null>(null);
 
-  const items = useMemo(
-    () =>
-      Object.entries(quantities)
-        .filter(([, qty]) => qty > 0)
-        .map(([sku, qty]) => ({ sku, qty })),
-    [quantities],
+  const inCart = useMemo(
+    () => products.filter((product) => (cart[product.sku] ?? 0) > 0),
+    [cart, products],
   );
+  const items = useMemo(
+    () => inCart.map((product) => ({ sku: product.sku, qty: cart[product.sku] })),
+    [cart, inCart],
+  );
+
+  // "Buy now" links arrive with ?sku=; the item joins the cart once, so a reload adds nothing.
+  useEffect(() => {
+    const known = preselected !== null && products.some((p) => p.sku === preselected);
+    if (known && !(preselected in readCart())) setQuantity(preselected, 1);
+  }, [preselected, products]);
+
+  // A signed-in customer does not have to type their email again.
+  useEffect(() => {
+    api<{ email: string; csrf_token: string }>("/api/v1/auth/me")
+      .then((me) => {
+        csrf.current = me.csrf_token;
+        setEmail((current) => current || me.email);
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (items.length === 0) {
@@ -94,8 +111,9 @@ export function CheckoutForm({ locale, products }: { locale: Locale; products: P
   }, [items, method, voucher, locale]);
 
   function setQty(sku: string, text: string, limit: number) {
-    const parsed = /^[0-9]{1,2}$/.test(text) ? Number(text) : 0;
-    setQuantities((previous) => ({ ...previous, [sku]: Math.min(parsed, limit) }));
+    // Never drops to zero while typing; removing an item is the remove button's job.
+    const parsed = /^[0-9]{1,2}$/.test(text) ? Number(text) : 1;
+    setQuantity(sku, Math.max(1, Math.min(parsed, limit)));
     setFormError(null);
   }
 
@@ -127,12 +145,28 @@ export function CheckoutForm({ locale, products }: { locale: Locale; products: P
     if (attempt.current?.body !== body) attempt.current = { body, key: randomKey() };
     setSubmitting(true);
     try {
-      const order = await api<Order>("/api/v1/orders", {
-        method: "POST",
-        body,
-        headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.current.key },
-      });
+      const key = attempt.current.key;
+      const send = () =>
+        api<Order>("/api/v1/orders", {
+          method: "POST",
+          body,
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": key,
+            ...(csrf.current ? { "X-CSRF-Token": csrf.current } : {}),
+          },
+        });
+      let order: Order;
+      try {
+        order = await send();
+      } catch (error) {
+        // Submitted before the session lookup finished: fetch the token once, then retry.
+        if (!(error instanceof ApiError && error.code === "CSRF_FAILED")) throw error;
+        csrf.current = (await api<{ csrf_token: string }>("/api/v1/auth/me")).csrf_token;
+        order = await send();
+      }
       sessionStorage.setItem(`ib:order:${order.id}`, JSON.stringify(order));
+      clearCart();
       router.push(`/${locale}/track?order=${encodeURIComponent(order.id)}`);
     } catch (error) {
       setSubmitting(false);
@@ -152,28 +186,75 @@ export function CheckoutForm({ locale, products }: { locale: Locale; products: P
         <div className="stack">
           <section className="card" aria-labelledby="items-title" id="items" tabIndex={-1}>
             <h2 id="items-title">{t.checkout.items}</h2>
-            {products.map((product) => {
-              const limit = Math.min(
-                product.max_qty_per_order ?? MAX_QTY,
-                product.stock_remaining ?? MAX_QTY,
-              );
-              return (
-                <div key={product.sku} className="line-item">
-                  <label htmlFor={`qty-${product.sku}`}>
-                    {product.name}
-                    <span className="field-hint">฿{formatBaht(product.price_satang)}</span>
-                  </label>
-                  <input
-                    id={`qty-${product.sku}`}
-                    className="input"
-                    inputMode="numeric"
-                    aria-label={`${t.checkout.quantity} ${product.name}`}
-                    value={quantities[product.sku] ?? 0}
-                    onChange={(event) => setQty(product.sku, event.target.value, limit)}
-                  />
-                </div>
-              );
-            })}
+            {inCart.length === 0 ? (
+              <div className="stack">
+                <p className="muted">{t.cart.empty}</p>
+                <Link className="btn btn-secondary" href={`/${locale}`}>
+                  {t.cart.browse}
+                </Link>
+              </div>
+            ) : (
+              inCart.map((product) => {
+                const qty = cart[product.sku];
+                const limit = orderLimit(product);
+                const perEmail =
+                  product.max_qty_per_email !== null
+                    ? ` · ${t.product.perEmail(product.max_qty_per_email)}`
+                    : "";
+                return (
+                  <div key={product.sku} className="cart-line">
+                    <div className="cart-info">
+                      <span className="strong">{product.name}</span>
+                      <span className="field-hint">
+                        ฿{formatBaht(product.price_satang)}
+                        {perEmail}
+                      </span>
+                    </div>
+                    <div className="qty">
+                      <button
+                        type="button"
+                        className="qbtn"
+                        aria-label={`${t.cart.decrease} ${product.name}`}
+                        disabled={qty <= 1}
+                        onClick={() => setQuantity(product.sku, qty - 1)}
+                      >
+                        −
+                      </button>
+                      <input
+                        id={`qty-${product.sku}`}
+                        className="input qty-input"
+                        inputMode="numeric"
+                        aria-label={`${t.checkout.quantity} ${product.name}`}
+                        value={qty}
+                        onChange={(event) => setQty(product.sku, event.target.value, limit)}
+                      />
+                      <button
+                        type="button"
+                        className="qbtn"
+                        aria-label={`${t.cart.increase} ${product.name}`}
+                        disabled={qty >= limit}
+                        onClick={() => setQuantity(product.sku, qty + 1)}
+                      >
+                        +
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="link-btn"
+                      aria-label={`${t.cart.remove} ${product.name}`}
+                      onClick={() => setQuantity(product.sku, 0)}
+                    >
+                      {t.cart.remove}
+                    </button>
+                  </div>
+                );
+              })
+            )}
+            {inCart.length > 0 ? (
+              <Link className="small" href={`/${locale}`}>
+                {t.cart.addMore}
+              </Link>
+            ) : null}
             {errors.items ? <span className="field-error">{errors.items}</span> : null}
           </section>
 

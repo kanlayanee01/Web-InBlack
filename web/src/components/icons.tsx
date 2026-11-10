@@ -61,6 +61,33 @@ export function UserIcon({ size = 20 }: { size?: number }) {
   );
 }
 
+export function CartIcon({ size = 20 }: { size?: number }) {
+  return (
+    <Icon size={size}>
+      <path d="M3 4h2l2.4 11h11.2L21 7H6.2" />
+      <circle cx="9" cy="19.5" r="1.3" />
+      <circle cx="17" cy="19.5" r="1.3" />
+    </Icon>
+  );
+}
+
+export function MoonIcon({ size = 20 }: { size?: number }) {
+  return (
+    <Icon size={size}>
+      <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
+    </Icon>
+  );
+}
+
+export function SunIcon({ size = 20 }: { size?: number }) {
+  return (
+    <Icon size={size}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </Icon>
+  );
+}
+
 export function CheckIcon({ size = 20 }: { size?: number }) {
   return (
     <Icon size={size}>

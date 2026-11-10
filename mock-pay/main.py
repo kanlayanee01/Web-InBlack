@@ -27,6 +27,8 @@ from pydantic import BaseModel, Field
 
 DB_PATH = os.environ.get("DB_PATH", "/data/mock-pay.db")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "http://proxy/api/v1/webhooks/payment")
+# The shop as the customer's browser sees it, for the "back to shop" button.
+WEB_PUBLIC_URL = os.environ.get("WEB_PUBLIC_URL", "http://localhost:8088").rstrip("/")
 SECRET = os.environ["PAYMENT_WEBHOOK_SECRET"]
 MAX_DELIVERY_ATTEMPTS = 8
 SLOW_WEBHOOK_SECONDS = 60
@@ -44,18 +46,15 @@ ACTIONS = {
 PAGE_STYLE = """
 :root{color-scheme:light dark;--bg:#F8F2D8;--surface:rgba(255,255,255,.74);--line:rgba(255,255,255,.85);
 --line-2:rgba(20,0,195,.16);--text:#15104F;--muted:#4A4672;--primary:#1400C3;--on-primary:#F8F2D8;
---sphere:#1400C3;--accent:#FF4E02;--shadow:0 12px 32px rgba(20,0,195,.1)}
+--accent:#FF4E02;--shadow:0 12px 32px rgba(20,0,195,.1)}
 @media (prefers-color-scheme:dark){:root{--bg:#0A0738;--surface:rgba(255,255,255,.1);
 --line:rgba(255,255,255,.22);--line-2:rgba(255,255,255,.18);--text:#F8F2D8;--muted:#CBC6E3;
 --primary:#F8F2D8;--on-primary:#15104F;--shadow:0 12px 32px rgba(0,0,0,.35)}}
 *{box-sizing:border-box}
 html{background:var(--bg);overflow-x:hidden}
-body{margin:0;min-height:100vh;position:relative;overflow-x:clip;display:flex;align-items:center;
+body{margin:0;min-height:100vh;min-height:100dvh;position:relative;overflow-x:clip;display:flex;align-items:center;
 justify-content:center;padding:16px;color:var(--text);line-height:1.7;
 font-family:"IBM Plex Sans Thai",system-ui,sans-serif}
-body::before,body::after{content:"";position:absolute;z-index:-1;border-radius:50%}
-body::before{width:420px;height:420px;right:-120px;top:-120px;background:var(--sphere)}
-body::after{width:300px;height:300px;left:-100px;bottom:-80px;background:var(--accent)}
 .glass{width:100%;min-width:0;max-width:440px;padding:24px;border-radius:20px;background:var(--surface);
 border:1px solid var(--line);box-shadow:var(--shadow);
 -webkit-backdrop-filter:blur(22px) saturate(150%);backdrop-filter:blur(22px) saturate(150%)}
@@ -67,10 +66,11 @@ margin-bottom:12px;border-top:1px solid var(--line-2);border-bottom:1px solid va
 .amount strong{font-size:1.5rem}
 .actions{display:flex;flex-direction:column;gap:8px}
 form{margin:0}
+.back{display:flex;align-items:center;justify-content:center;min-height:48px;margin-top:8px;border-radius:14px;background:var(--primary);color:var(--on-primary);font-weight:600;text-decoration:none}
+.back:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 button{width:100%;min-height:48px;padding:8px 16px;border-radius:14px;font:inherit;font-weight:600;
 cursor:pointer;background:var(--surface);color:var(--text);border:1px solid var(--line-2)}
 form:first-child button{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
-button:hover{filter:brightness(.95)}
 button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 """
 
@@ -272,7 +272,8 @@ async def pay(order_id: str, action: str, amount: int = Query(gt=0)) -> str:
     return _page(
         f"<h1>{title}</h1>"
         f'<p class="muted id">{html.escape(order_id)}</p>'
-        "<p>กลับไปที่แท็บเดิมได้เลย สถานะออเดอร์จะอัปเดตให้เอง</p>"
+        "<p>สถานะออเดอร์ในแท็บเดิมจะอัปเดตให้เอง</p>"
+        f'<a class="back" href="{html.escape(WEB_PUBLIC_URL)}/th">กลับไปหน้าหลัก</a>'
     )
 
 

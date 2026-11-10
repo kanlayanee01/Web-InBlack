@@ -10,9 +10,12 @@ import "@fontsource/ibm-plex-sans-thai/latin-400.css";
 import "@fontsource/ibm-plex-sans-thai/latin-600.css";
 import "@fontsource/ibm-plex-sans-thai/latin-700.css";
 import "../globals.css";
+import { CartLink } from "@/components/cart-controls";
 import { GemIcon, SearchIcon, UserIcon } from "@/components/icons";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { siteUrl } from "@/lib/catalog";
 import { dict, isLocale, LOCALES, type Locale } from "@/lib/i18n";
+import { THEME_SCRIPT } from "@/lib/theme";
 
 export const dynamicParams = false;
 
@@ -48,7 +51,10 @@ export default async function LocaleLayout({
   const t = dict(locale);
   const other: Locale = locale === "th" ? "en" : "th";
   return (
-    <html lang={locale}>
+    <html lang={locale} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>
         <a className="skip" href="#main">
           {locale === "th" ? "ข้ามไปเนื้อหา" : "Skip to content"}
@@ -57,7 +63,7 @@ export default async function LocaleLayout({
           <div className="header-inner">
             <Link className="brand" href={`/${locale}`}>
               <GemIcon size={26} />
-              {t.brand}
+              <span className="brand-text">{t.brand}</span>
             </Link>
             <nav className="nav" aria-label={locale === "th" ? "เมนูหลัก" : "Main"}>
               <Link href={`/${locale}`} className="nav-text">
@@ -71,8 +77,11 @@ export default async function LocaleLayout({
                 <UserIcon />
                 <span className="nav-text">{t.nav.myOrders}</span>
               </Link>
+              <CartLink href={`/${locale}/checkout`} label={t.cart.title} />
+              <ThemeToggle toDark={t.theme.toDark} toLight={t.theme.toLight} />
               <Link href={`/${other}`} lang={other} hrefLang={other}>
-                {t.otherLocale}
+                <span className="nav-text">{t.otherLocale}</span>
+                <span className="nav-short">{other.toUpperCase()}</span>
               </Link>
             </nav>
           </div>

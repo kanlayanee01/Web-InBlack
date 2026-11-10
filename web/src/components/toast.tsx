@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 
 import { CheckIcon } from "./icons";
 
@@ -14,10 +15,12 @@ export function Toast({ message, onClose }: { message: string | null; onClose: (
   }, [message, onClose]);
 
   if (message === null) return null;
-  return (
+  // Rendered on <body>: a glass card's backdrop-filter would otherwise trap position: fixed.
+  return createPortal(
     <div className="toast" role="status">
       <CheckIcon />
       <span>{message}</span>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -72,6 +72,58 @@ test("buy, pay, see the status change live, then refund in admin", async ({ page
   await adminContext.close();
 });
 
+test("the cart keeps what was added and checkout shows only those items", async ({ page }) => {
+  await page.goto("/th");
+  await page.getByRole("button", { name: "ใส่ตะกร้า Monthly Pass" }).click();
+  await page.getByRole("button", { name: "ใส่ตะกร้า 5,000 Diamonds" }).click();
+  // Monthly Pass is one per order, so a second add is refused.
+  await expect(page.getByRole("button", { name: "ใส่ตะกร้า Monthly Pass" })).toBeDisabled();
+  await page.getByRole("link", { name: "ตะกร้า 2" }).click();
+  await expect(page).toHaveURL(/\/th\/checkout$/);
+  await expect(page.locator(".cart-line")).toHaveCount(2);
+  await expect(page.locator(".sum .total dd")).toHaveText("฿1,769.00");
+  await page.getByRole("button", { name: "ลบ Monthly Pass" }).click();
+  await expect(page.locator(".cart-line")).toHaveCount(1);
+  await expect(page.locator(".sum .total dd")).toHaveText("฿1,590.00");
+  await page.reload();
+  await expect(page.locator(".cart-line")).toHaveCount(1);
+});
+
+test("the theme toggle switches to dark and remembers it", async ({ page }) => {
+  await page.goto("/th");
+  await page.getByRole("button", { name: "เปลี่ยนเป็นโหมดมืด" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.getByRole("button", { name: "เปลี่ยนเป็นโหมดสว่าง" })).toBeVisible();
+  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+  expect(results.violations.map((violation) => violation.id)).toEqual([]);
+});
+
+test("a signed-in customer can place an order", async ({ page, request }) => {
+  const email = `signed-${Date.now()}@example.com`;
+  await page.goto("/th/my-orders");
+  await page.getByLabel("อีเมล", { exact: true }).fill(email);
+  await page.getByRole("button", { name: "ส่งรหัส OTP" }).click();
+  await expect(page.getByLabel("รหัส OTP 6 หลัก")).toBeVisible();
+  let code = "";
+  await expect(async () => {
+    const query = encodeURIComponent(`to:"${email}"`);
+    const found = await (await request.get(`http://mailpit:8025/api/v1/search?query=${query}`)).json();
+    code = /[0-9]{6}/.exec(found.messages[0]?.Subject ?? "")?.[0] ?? "";
+    expect(code).toHaveLength(6);
+  }).toPass({ timeout: 10_000 });
+  await page.getByLabel("รหัส OTP 6 หลัก").fill(code);
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByRole("button", { name: "ออกจากระบบ" })).toBeVisible();
+
+  await page.goto("/th/checkout?sku=DIAMOND-5000");
+  await expect(page.getByLabel("อีเมล", { exact: true })).toHaveValue(email);
+  await page.getByLabel("Game UID").fill("123456789");
+  await page.getByRole("button", { name: "สร้างออเดอร์" }).click();
+  await expect(page).toHaveURL(/\/th\/track\?order=ORD-/);
+});
+
 test("checkout can be completed with the keyboard alone", async ({ page }) => {
   await page.goto("/th/checkout?sku=MONTHLY-PASS");
   await expect(page.locator(".sum .total dd")).toHaveText("฿179.00");

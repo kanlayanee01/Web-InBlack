@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Field, Spinner } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 
@@ -63,6 +64,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <Link href="/admin/orders">ออเดอร์</Link>
             {canFinance ? <Link href="/admin/reconciliation">กระทบยอด</Link> : null}
             {admin.role === "superadmin" ? <Link href="/admin/products">สินค้า</Link> : null}
+            <ThemeToggle toDark="เปลี่ยนเป็นโหมดมืด" toLight="เปลี่ยนเป็นโหมดสว่าง" />
             <button
               className="btn btn-secondary"
               type="button"

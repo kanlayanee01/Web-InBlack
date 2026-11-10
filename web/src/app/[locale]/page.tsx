@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AddToCart } from "@/components/cart-controls";
 import { ProductIcon } from "@/components/icons";
 import { getProducts } from "@/lib/catalog";
 import { dict, isLocale } from "@/lib/i18n";
+import { orderLimit } from "@/lib/limits";
 import { formatBaht } from "@/lib/money";
 
 export const revalidate = 30;
@@ -52,13 +54,22 @@ export default async function HomePage({ params }: Props) {
               <Link href={`/${locale}/products/${product.slug}`}>{product.name}</Link>
             </h2>
             <p className="price">฿{formatBaht(product.price_satang)}</p>
-            <Link
-              className="btn btn-block"
-              href={`/${locale}/checkout?sku=${encodeURIComponent(product.sku)}`}
-              aria-label={`${t.home.buy} ${product.name}`}
-            >
-              {t.home.buy}
-            </Link>
+            <div className="buy-row">
+              <AddToCart
+                sku={product.sku}
+                name={product.name}
+                limit={orderLimit(product)}
+                className="btn btn-secondary"
+                labels={{ add: t.cart.add, added: t.cart.added, limitReached: t.cart.limitReached, soldOut: t.cart.soldOut }}
+              />
+              <Link
+                className="btn"
+                href={`/${locale}/checkout?sku=${encodeURIComponent(product.sku)}`}
+                aria-label={`${t.product.buy} ${product.name}`}
+              >
+                {t.product.buy}
+              </Link>
+            </div>
           </article>
         ))}
       </div>
